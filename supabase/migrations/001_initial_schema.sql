@@ -1,5 +1,5 @@
 -- 001_initial_schema.sql
--- Initial schema, strict RLS policies, and auth onboarding trigger for StoreMind AI.
+-- Initial schema, strict RLS policies, and auth onboarding trigger for StoreOne.
 
 create extension if not exists pgcrypto;
 

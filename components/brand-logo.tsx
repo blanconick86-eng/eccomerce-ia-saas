@@ -17,7 +17,7 @@ export function BrandLogo({ href = "/", compact = false }: BrandLogoProps) {
       </span>
       {!compact && (
         <span className="text-base font-semibold tracking-tight text-slate-900">
-          StoreMind <span className="text-indigo-600">AI</span>
+          Store<span className="text-indigo-600">One</span>
         </span>
       )}
     </Link>

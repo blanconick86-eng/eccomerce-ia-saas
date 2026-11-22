@@ -44,7 +44,7 @@ function WidgetUnavailableState({ message }: { message: string }) {
           <AlertCircle className="h-5 w-5" aria-hidden="true" />
         </div>
         <h1 className="mt-3 text-base font-semibold text-slate-900">
-          StoreMind AI
+          StoreOne
         </h1>
         <p className="mt-1.5 text-sm text-slate-600">{message}</p>
       </div>

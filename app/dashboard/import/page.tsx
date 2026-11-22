@@ -189,7 +189,7 @@ export default function ImportPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "storemind-sample-products.csv";
+    anchor.download = "storeone-sample-products.csv";
     anchor.click();
     URL.revokeObjectURL(url);
   };

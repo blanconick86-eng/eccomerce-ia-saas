@@ -91,7 +91,8 @@ export default function ChannelsPage() {
         event.origin === origin &&
         event.data &&
         typeof event.data === "object" &&
-        (event.data as { type?: string }).type === "storemind:close"
+        ((event.data as { type?: string }).type === "storeone:close" ||
+          (event.data as { type?: string }).type === "storemind:close")
       ) {
         setPreviewChannelId(null);
       }
@@ -590,7 +591,7 @@ export default function ChannelsPage() {
           <div className="h-[540px] w-[380px] max-w-[calc(100vw-2rem)] max-h-[calc(100vh-7rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
             <iframe
               src={`/widget/${storeId}?channelId=${encodeURIComponent(previewChannelId)}`}
-              title="StoreMind AI Channel Preview"
+              title="StoreOne Channel Preview"
               className="h-full w-full border-0"
             />
           </div>

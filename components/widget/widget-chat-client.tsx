@@ -102,7 +102,7 @@ export function WidgetChatClient({
 
   const handleCloseIframe = () => {
     if (!inIframe) return;
-    window.parent.postMessage({ type: "storemind:close" }, "*");
+    window.parent.postMessage({ type: "storeone:close" }, "*");
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -202,10 +202,10 @@ export function WidgetChatClient({
               />
               <span>
                 {channelName
-                  ? `${channelName} · ${isEn ? "AI Support" : "Asistente virtual"}`
+                  ? `${channelName} · StoreOne`
                   : isEn
-                    ? "AI Support"
-                    : "Asistente virtual"}
+                    ? "StoreOne AI Support"
+                    : "Asistente StoreOne"}
               </span>
             </p>
           </div>
@@ -329,7 +329,7 @@ export function WidgetChatClient({
           </button>
         </form>
         <p className="mt-1.5 text-center text-[11px] text-slate-400">
-          Powered by StoreMind AI
+          Powered by StoreOne
         </p>
       </footer>
     </div>

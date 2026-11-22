@@ -5,7 +5,7 @@
     return;
   }
 
-  if (window.__STOREMIND_WIDGET_LOADED__) {
+  if (window.__STOREONE_WIDGET_LOADED__) {
     return;
   }
 
@@ -23,7 +23,7 @@
 
   if (!storeId) {
     console.warn(
-      "[StoreMind Widget] Missing data-store-id attribute on script tag."
+      "[StoreOne Widget] Missing data-store-id attribute on script tag."
     );
     return;
   }
@@ -31,7 +31,7 @@
   const rawChannelId = currentScript.getAttribute("data-channel-id");
   const channelId = rawChannelId ? rawChannelId.trim() : "";
 
-  window.__STOREMIND_WIDGET_LOADED__ = true;
+  window.__STOREONE_WIDGET_LOADED__ = true;
 
   let origin = window.location.origin;
   const scriptSrc = currentScript.getAttribute("src") || currentScript.src;
@@ -55,14 +55,14 @@
     '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
 
   function mountWidget() {
-    if (!document.body || document.getElementById("storemind-widget-btn")) {
+    if (!document.body || document.getElementById("storeone-widget-btn")) {
       return;
     }
 
     const styleEl = document.createElement("style");
-    styleEl.id = "storemind-widget-styles";
+    styleEl.id = "storeone-widget-styles";
     styleEl.textContent = [
-      "#storemind-widget-btn {",
+      "#storeone-widget-btn {",
       "  position: fixed;",
       "  right: 20px;",
       "  bottom: 20px;",
@@ -80,18 +80,18 @@
       "  box-shadow: 0 12px 28px rgba(79, 70, 229, 0.35), 0 4px 10px rgba(15, 23, 42, 0.12);",
       "  transition: transform 0.18s ease, background-color 0.18s ease;",
       "}",
-      "#storemind-widget-btn:hover {",
+      "#storeone-widget-btn:hover {",
       "  background: #4338ca;",
       "  transform: translateY(-2px);",
       "}",
-      "#storemind-widget-btn:active {",
+      "#storeone-widget-btn:active {",
       "  transform: scale(0.96);",
       "}",
-      "#storemind-widget-btn:focus-visible {",
+      "#storeone-widget-btn:focus-visible {",
       "  outline: 3px solid #a5b4fc;",
       "  outline-offset: 2px;",
       "}",
-      "#storemind-widget-frame-wrap {",
+      "#storeone-widget-frame-wrap {",
       "  position: fixed;",
       "  right: 20px;",
       "  bottom: 88px;",
@@ -108,11 +108,11 @@
       "  display: none;",
       "}",
       "@media (max-width: 480px) {",
-      "  #storemind-widget-btn {",
+      "  #storeone-widget-btn {",
       "    right: 16px;",
       "    bottom: 16px;",
       "  }",
-      "  #storemind-widget-frame-wrap {",
+      "  #storeone-widget-frame-wrap {",
       "    right: 12px;",
       "    left: 12px;",
       "    bottom: 82px;",
@@ -126,12 +126,12 @@
     document.head.appendChild(styleEl);
 
     const frameWrap = document.createElement("div");
-    frameWrap.id = "storemind-widget-frame-wrap";
+    frameWrap.id = "storeone-widget-frame-wrap";
     frameWrap.setAttribute("role", "dialog");
     frameWrap.setAttribute("aria-label", "Store chat assistant");
 
     const iframe = document.createElement("iframe");
-    iframe.title = "StoreMind AI Chat";
+    iframe.title = "StoreOne Chat";
     iframe.setAttribute("allow", "clipboard-write");
     iframe.style.width = "100%";
     iframe.style.height = "100%";
@@ -140,7 +140,7 @@
     frameWrap.appendChild(iframe);
 
     const button = document.createElement("button");
-    button.id = "storemind-widget-btn";
+    button.id = "storeone-widget-btn";
     button.type = "button";
     button.setAttribute("aria-label", "Open support chat");
     button.setAttribute("aria-expanded", "false");
@@ -179,7 +179,11 @@
       if (event.origin !== origin) {
         return;
       }
-      if (event.data && event.data.type === "storemind:close") {
+      if (
+        event.data &&
+        (event.data.type === "storeone:close" ||
+          event.data.type === "storemind:close")
+      ) {
         setOpen(false);
       }
     });

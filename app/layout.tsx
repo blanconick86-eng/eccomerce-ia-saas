@@ -14,8 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StoreMind AI — Customer Support for Ecommerce",
-  description: "Customer support, powered by your store's knowledge.",
+  title: "StoreOne — Bandeja de Entrada Unificada con IA",
+  description:
+    "Atención al cliente multicanal con IA impulsada por el catálogo y las políticas reales de tu tienda.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
