@@ -872,7 +872,7 @@ export const translations = {
         integrationsSubtitle:
           "Estado de la autenticación, base de datos y motor de IA.",
         connectedAuth: "Conectado (Auth y RLS)",
-        connectedGemini: "Conectado (llama-3.3-70b-versatile)",
+        connectedGemini: "Conectado (openai/gpt-oss-120b)",
         notConnected: "No conectado",
       },
     },
@@ -1747,7 +1747,7 @@ export const translations = {
         integrationsSubtitle:
           "Authentication, database, and AI engine connection status.",
         connectedAuth: "Connected (Auth & RLS)",
-        connectedGemini: "Connected (llama-3.3-70b-versatile)",
+        connectedGemini: "Connected (openai/gpt-oss-120b)",
         notConnected: "Not connected",
       },
     },

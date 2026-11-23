@@ -9,7 +9,7 @@ import {
 import type { Message, Policy, Product } from "@/types/database";
 
 export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
+export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
 export function getGroqModel(): string {
   return process.env.GROQ_MODEL?.trim() || DEFAULT_GROQ_MODEL;
@@ -264,10 +264,38 @@ async function callGroqChatCompletion(params: {
     throw missingErr;
   }
 
+  let messagesToSend = params.messages;
+  if (params.jsonMode) {
+    const hasJsonInSystem = params.messages.some(
+      (msg) => msg.role === "system" && /\bjson\b/i.test(msg.content)
+    );
+    if (!hasJsonInSystem) {
+      const sysIdx = params.messages.findIndex((msg) => msg.role === "system");
+      if (sysIdx >= 0) {
+        messagesToSend = params.messages.map((msg, idx) =>
+          idx === sysIdx
+            ? {
+                ...msg,
+                content: `${msg.content}\n\nRespond strictly with a valid JSON object.`,
+              }
+            : msg
+        );
+      } else {
+        messagesToSend = [
+          {
+            role: "system",
+            content: "Respond strictly with a valid JSON object.",
+          },
+          ...params.messages,
+        ];
+      }
+    }
+  }
+
   const model = getGroqModel();
   const payload = {
     model,
-    messages: params.messages,
+    messages: messagesToSend,
     temperature: params.temperature,
     ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
   };
