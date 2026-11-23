@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
   type FormEvent,
 } from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   Check,
@@ -15,17 +16,24 @@ import {
   Copy,
   ExternalLink,
   Globe,
+  Link2,
   Loader2,
+  Mail,
   MessageCircle,
   MessageSquare,
   Package,
   Plus,
+  Send,
   ShoppingBag,
   Trash2,
   X,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/language-context";
 import type { Channel } from "@/types/database";
+
+const DEFAULT_FROM_EMAIL = "StoreOne <onboarding@resend.dev>";
+const INBOUND_WEBHOOK_URL =
+  "https://storeonlyinone.vercel.app/api/webhooks/email";
 
 function subscribeNoop() {
   return () => {};
@@ -38,6 +46,66 @@ function getOriginSnapshot() {
 function getOriginServerSnapshot() {
   return "";
 }
+
+function readEmailCredentials(credentials: Channel["credentials"]): {
+  supportEmail: string;
+  fromEmail: string;
+} {
+  if (!credentials || typeof credentials !== "object") {
+    return { supportEmail: "", fromEmail: DEFAULT_FROM_EMAIL };
+  }
+  const supportEmail =
+    typeof credentials.support_email === "string"
+      ? credentials.support_email
+      : "";
+  const fromEmail =
+    typeof credentials.from_email === "string" && credentials.from_email.trim()
+      ? credentials.from_email
+      : DEFAULT_FROM_EMAIL;
+  return { supportEmail, fromEmail };
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fallback below
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  document.body.removeChild(textarea);
+  return copied;
+}
+
+type EmailTestResponse = {
+  conversationId?: string;
+  messageId?: string;
+  status?: "auto_sent" | "pending_approval";
+  reply?: string;
+  emailDelivery?: {
+    sent?: boolean;
+    to?: string;
+    subject?: string;
+    id?: string | null;
+    error?: string | null;
+  };
+  error?: string;
+};
 
 const UPCOMING_ICON_MAP = {
   mercadolibre: ShoppingBag,
@@ -58,13 +126,34 @@ export default function ChannelsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Web widget creation
   const [newName, setNewName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
-  const [copiedChannelId, setCopiedChannelId] = useState<string | null>(null);
+  // Email channel creation
+  const [emailName, setEmailName] = useState("Soporte Email");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [fromEmail, setFromEmail] = useState(DEFAULT_FROM_EMAIL);
+  const [isCreatingEmail, setIsCreatingEmail] = useState(false);
+
+  // Copy & delete & widget preview state
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [previewChannelId, setPreviewChannelId] = useState<string | null>(null);
+
+  // Inbound email tester state
+  const [testingChannelId, setTestingChannelId] = useState<string | null>(null);
+  const [testFromEmail, setTestFromEmail] = useState("");
+  const [testSubject, setTestSubject] = useState(
+    "Consulta sobre stock y envíos"
+  );
+  const [testBody, setTestBody] = useState(
+    "Hola, quería consultar si tienen productos disponibles en stock y cuánto demora el envío."
+  );
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<EmailTestResponse | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
 
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -147,6 +236,23 @@ export default function ChannelsPage() {
     };
   }, [t.dashboard.channels.loadError]);
 
+  const markCopied = (key: string) => {
+    setCopiedKey(key);
+    if (copyTimerRef.current) {
+      clearTimeout(copyTimerRef.current);
+    }
+    copyTimerRef.current = setTimeout(() => {
+      setCopiedKey(null);
+    }, 2200);
+  };
+
+  const handleCopyValue = async (key: string, value: string) => {
+    const ok = await copyTextToClipboard(value);
+    if (ok) {
+      markCopied(key);
+    }
+  };
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = newName.trim();
@@ -184,6 +290,52 @@ export default function ChannelsPage() {
     }
   };
 
+  const handleCreateEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedName = emailName.trim();
+    const trimmedSupport = supportEmail.trim();
+    const trimmedFrom = fromEmail.trim() || DEFAULT_FROM_EMAIL;
+    if (!trimmedName || !trimmedSupport || isCreatingEmail) return;
+
+    setIsCreatingEmail(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          type: "email",
+          credentials: {
+            support_email: trimmedSupport,
+            from_email: trimmedFrom,
+          },
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        channel?: Channel;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.channel) {
+        setErrorMessage(payload.error || t.dashboard.channels.createError);
+        return;
+      }
+
+      setChannels((prev) => [payload.channel!, ...prev]);
+      setSupportEmail("");
+      if (!testFromEmail) {
+        setTestFromEmail(trimmedSupport);
+      }
+    } catch {
+      setErrorMessage(t.dashboard.channels.createError);
+    } finally {
+      setIsCreatingEmail(false);
+    }
+  };
+
   const handleDelete = async (channelId: string) => {
     if (deletingId) return;
     setDeletingId(channelId);
@@ -211,6 +363,11 @@ export default function ChannelsPage() {
       if (previewChannelId === channelId) {
         setPreviewChannelId(null);
       }
+      if (testingChannelId === channelId) {
+        setTestingChannelId(null);
+        setTestResult(null);
+        setTestError(null);
+      }
     } catch {
       setErrorMessage(t.dashboard.channels.deleteError);
     } finally {
@@ -218,51 +375,50 @@ export default function ChannelsPage() {
     }
   };
 
+  const handleTestInboundEmail = async (
+    event: FormEvent<HTMLFormElement>,
+    channelId: string
+  ) => {
+    event.preventDefault();
+    if (!storeId || !testFromEmail.trim() || !testSubject.trim() || !testBody.trim() || isSendingTest) {
+      return;
+    }
+
+    setIsSendingTest(true);
+    setTestResult(null);
+    setTestError(null);
+
+    try {
+      const response = await fetch("/api/webhooks/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId,
+          channelId,
+          fromEmail: testFromEmail.trim(),
+          subject: testSubject.trim(),
+          body: testBody.trim(),
+        }),
+      });
+
+      const payload = (await response.json()) as EmailTestResponse;
+      if (!response.ok) {
+        setTestError(payload.error || t.dashboard.channels.emailSection.testError);
+        return;
+      }
+
+      setTestResult(payload);
+    } catch {
+      setTestError(t.dashboard.channels.emailSection.testError);
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
+
   const buildChannelSnippet = (channelId: string) => {
     const baseUrl = origin || "https://TU_URL";
     const resolvedStore = storeId || "STORE_ID";
     return `<script src="${baseUrl}/widget.js" data-store-id="${resolvedStore}" data-channel-id="${channelId}" async></script>`;
-  };
-
-  const handleCopySnippet = async (channelId: string) => {
-    if (!storeId) return;
-    const snippet = buildChannelSnippet(channelId);
-    let copied = false;
-
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(snippet);
-        copied = true;
-      }
-    } catch {
-      copied = false;
-    }
-
-    if (!copied) {
-      const textarea = document.createElement("textarea");
-      textarea.value = snippet;
-      textarea.setAttribute("readonly", "true");
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        copied = document.execCommand("copy");
-      } catch {
-        copied = false;
-      }
-      document.body.removeChild(textarea);
-    }
-
-    if (copied) {
-      setCopiedChannelId(channelId);
-      if (copyTimerRef.current) {
-        clearTimeout(copyTimerRef.current);
-      }
-      copyTimerRef.current = setTimeout(() => {
-        setCopiedChannelId(null);
-      }, 2200);
-    }
   };
 
   return (
@@ -289,66 +445,216 @@ export default function ChannelsPage() {
         </div>
       )}
 
-      {/* Create new Web Widget channel */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
-        <div className="flex items-start gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-            <Globe className="h-5 w-5" aria-hidden="true" />
-          </span>
+      {/* Channel setup cards: Web Widget & Email (Resend) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Create new Web Widget channel */}
+        <section className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              {t.dashboard.channels.createTitle}
-            </h2>
-            <p className="mt-0.5 text-sm text-slate-600">
-              {t.dashboard.channels.createSubtitle}
-            </p>
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <Globe className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">
+                  {t.dashboard.channels.createTitle}
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {t.dashboard.channels.createSubtitle}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <form
-          onSubmit={handleCreate}
-          className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end"
-        >
-          <div className="flex-1">
-            <label
-              htmlFor="channel-name"
-              className="block text-sm font-medium text-slate-700"
+          <form onSubmit={handleCreate} className="mt-5 space-y-4">
+            <div>
+              <label
+                htmlFor="channel-name"
+                className="block text-sm font-medium text-slate-700"
+              >
+                {t.dashboard.channels.nameLabel}
+              </label>
+              <input
+                id="channel-name"
+                type="text"
+                required
+                maxLength={80}
+                disabled={isCreating}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={t.dashboard.channels.namePlaceholder}
+                className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isCreating || !newName.trim()}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {t.dashboard.channels.nameLabel}
-            </label>
-            <input
-              id="channel-name"
-              type="text"
-              required
-              maxLength={80}
-              disabled={isCreating}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={t.dashboard.channels.namePlaceholder}
-              className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
-            />
+              {isCreating ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span>
+                {isCreating
+                  ? t.dashboard.channels.creating
+                  : t.dashboard.channels.createBtn}
+              </span>
+            </button>
+          </form>
+        </section>
+
+        {/* Active Email (Resend) channel setup */}
+        <section className="rounded-2xl border border-teal-200/90 bg-white p-6 shadow-xs">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 ring-1 ring-inset ring-teal-200">
+                <Mail className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">
+                  {t.dashboard.channels.emailSection.title}
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {t.dashboard.channels.emailSection.subtitle}
+                </p>
+              </div>
+            </div>
+
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-semibold text-teal-800 ring-1 ring-inset ring-teal-200">
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              <span>{t.dashboard.channels.emailSection.activeBadge}</span>
+            </span>
           </div>
 
-          <button
-            type="submit"
-            disabled={isCreating || !newName.trim()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isCreating ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            )}
-            <span>
-              {isCreating
-                ? t.dashboard.channels.creating
-                : t.dashboard.channels.createBtn}
-            </span>
-          </button>
-        </form>
-      </section>
+          <form onSubmit={handleCreateEmail} className="mt-4 space-y-3.5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="email-channel-name"
+                  className="block text-xs font-medium text-slate-700"
+                >
+                  {t.dashboard.channels.emailSection.nameLabel}
+                </label>
+                <input
+                  id="email-channel-name"
+                  type="text"
+                  required
+                  maxLength={80}
+                  disabled={isCreatingEmail}
+                  value={emailName}
+                  onChange={(e) => setEmailName(e.target.value)}
+                  placeholder={t.dashboard.channels.emailSection.namePlaceholder}
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+                />
+              </div>
 
-      {/* Connected Web Widget Channels */}
+              <div>
+                <label
+                  htmlFor="email-support-address"
+                  className="block text-xs font-medium text-slate-700"
+                >
+                  {t.dashboard.channels.emailSection.supportEmailLabel}
+                </label>
+                <input
+                  id="email-support-address"
+                  type="email"
+                  required
+                  disabled={isCreatingEmail}
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  placeholder={
+                    t.dashboard.channels.emailSection.supportEmailPlaceholder
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="email-from-address"
+                className="block text-xs font-medium text-slate-700"
+              >
+                {t.dashboard.channels.emailSection.fromEmailLabel}
+              </label>
+              <input
+                id="email-from-address"
+                type="text"
+                maxLength={160}
+                disabled={isCreatingEmail}
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+              />
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                {t.dashboard.channels.emailSection.fromEmailHelper}
+              </p>
+            </div>
+
+            {/* Inbound Webhook URL box */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                  <Link2 className="h-3.5 w-3.5 text-teal-600" aria-hidden="true" />
+                  <span>{t.dashboard.channels.emailSection.webhookTitle}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleCopyValue("webhook-global", INBOUND_WEBHOOK_URL)
+                  }
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  {copiedKey === "webhook-global" ? (
+                    <>
+                      <Check
+                        className="h-3 w-3 text-emerald-600"
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {t.dashboard.channels.emailSection.copiedWebhookBtn}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" aria-hidden="true" />
+                      <span>
+                        {t.dashboard.channels.emailSection.copyWebhookBtn}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-1.5 break-all font-mono text-xs text-slate-800">
+                {INBOUND_WEBHOOK_URL}
+              </p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={
+                isCreatingEmail || !emailName.trim() || !supportEmail.trim()
+              }
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isCreatingEmail ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Mail className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span>
+                {isCreatingEmail
+                  ? t.dashboard.channels.emailSection.connecting
+                  : t.dashboard.channels.emailSection.connectBtn}
+              </span>
+            </button>
+          </form>
+        </section>
+      </div>
+
+      {/* Connected Channels List */}
       <section className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">
@@ -379,10 +685,351 @@ export default function ChannelsPage() {
         ) : (
           <div className="space-y-4">
             {channels.map((channel) => {
-              const snippet = buildChannelSnippet(channel.id);
-              const isCopied = copiedChannelId === channel.id;
+              const isEmailChannel = channel.type === "email";
               const isConfirmingDelete = confirmDeleteId === channel.id;
               const isDeletingThis = deletingId === channel.id;
+
+              if (isEmailChannel) {
+                const emailCreds = readEmailCredentials(channel.credentials);
+                const isTestingThis = testingChannelId === channel.id;
+
+                return (
+                  <article
+                    key={channel.id}
+                    className="rounded-2xl border border-teal-200/80 bg-white p-6 shadow-xs"
+                  >
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-slate-900">
+                            {channel.name}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-inset ring-teal-200">
+                            <Mail className="h-3 w-3" aria-hidden="true" />
+                            <span>
+                              {t.dashboard.channels.emailSection.channelBadge}
+                            </span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                            <CheckCircle2
+                              className="h-3 w-3"
+                              aria-hidden="true"
+                            />
+                            <span>{t.dashboard.channels.connectedBadge}</span>
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                          {emailCreds.supportEmail && (
+                            <span>
+                              <strong>Support:</strong> {emailCreds.supportEmail}
+                            </span>
+                          )}
+                          <span>
+                            <strong>From:</strong> {emailCreds.fromEmail}
+                          </span>
+                          <span className="text-slate-400">
+                            {t.dashboard.channels.channelIdLabel}:{" "}
+                            <code className="font-mono text-slate-600">
+                              {channel.id}
+                            </code>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isTestingThis) {
+                              setTestingChannelId(null);
+                            } else {
+                              setTestingChannelId(channel.id);
+                              setTestResult(null);
+                              setTestError(null);
+                              if (!testFromEmail && emailCreds.supportEmail) {
+                                setTestFromEmail(emailCreds.supportEmail);
+                              }
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 ring-1 ring-teal-200 transition-colors hover:bg-teal-100"
+                        >
+                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                          <span>
+                            {isTestingThis
+                              ? t.dashboard.channels.emailSection.closeTestBtn
+                              : t.dashboard.channels.emailSection.testInboundBtn}
+                          </span>
+                        </button>
+
+                        {isConfirmingDelete ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            >
+                              {t.common.cancel}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => handleDelete(channel.id)}
+                              className="inline-flex items-center gap-1 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {isDeletingThis && (
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>
+                                {isDeletingThis
+                                  ? t.dashboard.channels.deleting
+                                  : t.dashboard.channels.confirmDelete}
+                              </span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(channel.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{t.dashboard.channels.deleteBtn}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Copyable webhook URL */}
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+                      <div className="min-w-0">
+                        <span className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                          {t.dashboard.channels.emailSection.webhookTitle}
+                        </span>
+                        <code className="break-all font-mono text-xs text-slate-800">
+                          {INBOUND_WEBHOOK_URL}
+                        </code>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopyValue(
+                            `webhook-${channel.id}`,
+                            INBOUND_WEBHOOK_URL
+                          )
+                        }
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        {copiedKey === `webhook-${channel.id}` ? (
+                          <>
+                            <Check
+                              className="h-3.5 w-3.5 text-emerald-600"
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {t.dashboard.channels.emailSection.copiedWebhookBtn}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>
+                              {t.dashboard.channels.emailSection.copyWebhookBtn}
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Test inbound email drawer */}
+                    {isTestingThis && (
+                      <div className="mt-4 rounded-2xl border border-teal-200 bg-teal-50/40 p-4">
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          {t.dashboard.channels.emailSection.testFormTitle}
+                        </h4>
+
+                        <form
+                          onSubmit={(e) =>
+                            handleTestInboundEmail(e, channel.id)
+                          }
+                          className="mt-3 space-y-3"
+                        >
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700">
+                                {t.dashboard.channels.emailSection.testFromLabel}
+                              </label>
+                              <input
+                                type="email"
+                                required
+                                disabled={isSendingTest}
+                                value={testFromEmail}
+                                onChange={(e) =>
+                                  setTestFromEmail(e.target.value)
+                                }
+                                placeholder={
+                                  t.dashboard.channels.emailSection
+                                    .testFromPlaceholder
+                                }
+                                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-xs font-medium text-slate-700">
+                                {
+                                  t.dashboard.channels.emailSection
+                                    .testSubjectLabel
+                                }
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                maxLength={300}
+                                disabled={isSendingTest}
+                                value={testSubject}
+                                onChange={(e) => setTestSubject(e.target.value)}
+                                placeholder={
+                                  t.dashboard.channels.emailSection
+                                    .testSubjectPlaceholder
+                                }
+                                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700">
+                              {t.dashboard.channels.emailSection.testBodyLabel}
+                            </label>
+                            <textarea
+                              rows={3}
+                              required
+                              maxLength={8000}
+                              disabled={isSendingTest}
+                              value={testBody}
+                              onChange={(e) => setTestBody(e.target.value)}
+                              placeholder={
+                                t.dashboard.channels.emailSection
+                                  .testBodyPlaceholder
+                              }
+                              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 disabled:bg-slate-50"
+                            />
+                          </div>
+
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="submit"
+                              disabled={
+                                isSendingTest ||
+                                !testFromEmail.trim() ||
+                                !testSubject.trim() ||
+                                !testBody.trim()
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-teal-700 disabled:opacity-60 transition-colors"
+                            >
+                              {isSendingTest ? (
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              <span>
+                                {isSendingTest
+                                  ? t.dashboard.channels.emailSection.sendingTest
+                                  : t.dashboard.channels.emailSection.sendTestBtn}
+                              </span>
+                            </button>
+                          </div>
+                        </form>
+
+                        {testError && (
+                          <div
+                            role="alert"
+                            className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-800"
+                          >
+                            <AlertCircle
+                              className="h-4 w-4 shrink-0 text-rose-600"
+                              aria-hidden="true"
+                            />
+                            <span>{testError}</span>
+                          </div>
+                        )}
+
+                        {testResult && (
+                          <div className="mt-3 space-y-2.5 rounded-xl border border-slate-200 bg-white p-4 text-xs">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-0.5 font-semibold ring-1 ring-inset ${
+                                  testResult.status === "auto_sent"
+                                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                                    : "bg-amber-50 text-amber-800 ring-amber-200"
+                                }`}
+                              >
+                                {testResult.status}
+                              </span>
+
+                              <Link
+                                href="/dashboard/conversations"
+                                className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+                              >
+                                {
+                                  t.dashboard.channels.emailSection
+                                    .goToConversationsBtn
+                                }{" "}
+                                →
+                              </Link>
+                            </div>
+
+                            {testResult.status === "auto_sent" ? (
+                              testResult.emailDelivery?.sent ? (
+                                <p className="font-medium text-emerald-700">
+                                  {
+                                    t.dashboard.channels.emailSection
+                                      .testSuccessAutoSent
+                                  }{" "}
+                                  ({testResult.emailDelivery.to})
+                                </p>
+                              ) : (
+                                <p className="font-medium text-amber-800">
+                                  {
+                                    t.dashboard.channels.emailSection
+                                      .testEmailFailedPrefix
+                                  }{" "}
+                                  {testResult.emailDelivery?.error ??
+                                    "Unknown Resend error"}
+                                </p>
+                              )
+                            ) : (
+                              <p className="font-medium text-amber-800">
+                                {
+                                  t.dashboard.channels.emailSection
+                                    .testSuccessPending
+                                }
+                              </p>
+                            )}
+
+                            {testResult.reply && (
+                              <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-800">
+                                {testResult.reply}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              }
+
+              const snippet = buildChannelSnippet(channel.id);
+              const isCopied = copiedKey === `snippet-${channel.id}`;
               const isPreviewOpen = previewChannelId === channel.id;
 
               return (
@@ -507,7 +1154,9 @@ export default function ChannelsPage() {
                       <button
                         type="button"
                         disabled={!storeId}
-                        onClick={() => handleCopySnippet(channel.id)}
+                        onClick={() =>
+                          handleCopyValue(`snippet-${channel.id}`, snippet)
+                        }
                         className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-50"
                       >
                         {isCopied ? (

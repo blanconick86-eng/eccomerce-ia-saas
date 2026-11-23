@@ -563,10 +563,14 @@ export const translations = {
         simulatorChannel: "Simulador",
         channelTypeLabels: {
           web_widget: "Web",
+          email: "Email",
           mercadolibre: "Mercado Libre",
           amazon: "Amazon",
           whatsapp: "WhatsApp",
         },
+        emailFromLabel: "De",
+        emailSubjectLabel: "Asunto",
+        emailSentSuccess: "Correo enviado con Resend a",
         statusLabels: {
           pending_approval: "Pendiente de aprobación",
           auto_sent: "Enviada automáticamente",
@@ -648,6 +652,45 @@ export const translations = {
         loadError: "No pudimos cargar los canales.",
         createError: "No pudimos crear el canal.",
         deleteError: "No pudimos eliminar el canal.",
+        emailSection: {
+          title: "Correo electrónico (Resend)",
+          subtitle:
+            "Conectá tu email de soporte para recibir consultas en la bandeja unificada y responder desde StoreOne con Resend.",
+          activeBadge: "Activo · Resend",
+          channelBadge: "Email",
+          nameLabel: "Nombre del canal",
+          namePlaceholder: "Ej: Soporte Email",
+          supportEmailLabel: "Email de soporte (support_email)",
+          supportEmailPlaceholder: "soporte@tutienda.com",
+          fromEmailLabel: "Remitente saliente (from_email)",
+          fromEmailHelper:
+            "Usá StoreOne <onboarding@resend.dev> para pruebas o un remitente de tu dominio verificado en Resend.",
+          connectBtn: "Conectar correo electrónico",
+          connecting: "Conectando...",
+          webhookTitle: "URL de Webhook de entrada",
+          copyWebhookBtn: "Copiar URL",
+          copiedWebhookBtn: "¡URL copiada!",
+          testInboundBtn: "Probar correo entrante",
+          closeTestBtn: "Cerrar prueba",
+          testFormTitle: "Simular llegada de un correo real",
+          testFromLabel: "Email del comprador remitente",
+          testFromPlaceholder: "cliente@ejemplo.com",
+          testSubjectLabel: "Asunto",
+          testSubjectPlaceholder: "Consulta sobre stock y envíos",
+          testBodyLabel: "Mensaje del correo",
+          testBodyPlaceholder:
+            "Hola, ¿tienen unidades disponibles y cuánto tarda el envío?",
+          sendTestBtn: "Enviar prueba al webhook",
+          sendingTest: "Procesando con Gemini y Resend...",
+          testSuccessAutoSent:
+            "Respuesta generada y enviada automáticamente por email con Resend.",
+          testSuccessPending:
+            "El mensaje quedó en pending_approval en la bandeja unificada para revisión manual.",
+          testEmailFailedPrefix:
+            "Se generó la respuesta (auto_sent), pero Resend devolvió:",
+          goToConversationsBtn: "Abrir Bandeja Unificada",
+          testError: "No pudimos simular el correo entrante.",
+        },
       },
       knowledge: {
         title: "Base de conocimiento",
@@ -1395,10 +1438,14 @@ export const translations = {
         simulatorChannel: "Simulator",
         channelTypeLabels: {
           web_widget: "Web",
+          email: "Email",
           mercadolibre: "Mercado Libre",
           amazon: "Amazon",
           whatsapp: "WhatsApp",
         },
+        emailFromLabel: "From",
+        emailSubjectLabel: "Subject",
+        emailSentSuccess: "Email sent via Resend to",
         statusLabels: {
           pending_approval: "Pending approval",
           auto_sent: "Auto-sent",
@@ -1480,6 +1527,45 @@ export const translations = {
         loadError: "Could not load channels.",
         createError: "Could not create channel.",
         deleteError: "Could not delete channel.",
+        emailSection: {
+          title: "Email (Resend)",
+          subtitle:
+            "Connect your support email so inbound customer emails enter the unified inbox and approved replies send via Resend.",
+          activeBadge: "Active · Resend",
+          channelBadge: "Email",
+          nameLabel: "Channel name",
+          namePlaceholder: "e.g., Support Email",
+          supportEmailLabel: "Support email (support_email)",
+          supportEmailPlaceholder: "support@yourstore.com",
+          fromEmailLabel: "Outbound sender (from_email)",
+          fromEmailHelper:
+            "Keep StoreOne <onboarding@resend.dev> for testing or use your verified Resend domain sender.",
+          connectBtn: "Connect email channel",
+          connecting: "Connecting...",
+          webhookTitle: "Inbound Webhook URL",
+          copyWebhookBtn: "Copy URL",
+          copiedWebhookBtn: "URL copied!",
+          testInboundBtn: "Test inbound email",
+          closeTestBtn: "Close test",
+          testFormTitle: "Simulate an inbound customer email",
+          testFromLabel: "Customer sender email",
+          testFromPlaceholder: "customer@example.com",
+          testSubjectLabel: "Subject",
+          testSubjectPlaceholder: "Question about stock and shipping",
+          testBodyLabel: "Email message",
+          testBodyPlaceholder:
+            "Hi, do you have this item in stock and how fast is delivery?",
+          sendTestBtn: "Send test to webhook",
+          sendingTest: "Processing with Gemini & Resend...",
+          testSuccessAutoSent:
+            "Reply generated and auto-sent via email with Resend.",
+          testSuccessPending:
+            "Reply queued as pending_approval in the unified inbox for review.",
+          testEmailFailedPrefix:
+            "Reply generated (auto_sent), but Resend returned:",
+          goToConversationsBtn: "Open Unified Inbox",
+          testError: "Could not simulate the inbound email.",
+        },
       },
       knowledge: {
         title: "Knowledge Base",

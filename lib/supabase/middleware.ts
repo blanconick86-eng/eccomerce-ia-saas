@@ -8,6 +8,7 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
   if (
     pathname === "/widget.js" ||
     pathname.startsWith("/api/widget") ||
+    pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/widget/")
   ) {
     return NextResponse.next({ request });

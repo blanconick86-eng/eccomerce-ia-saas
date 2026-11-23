@@ -60,6 +60,7 @@ export type Channel = {
   store_id: string;
   name: string;
   type: string;
+  credentials?: Record<string, unknown> | null;
   created_at: string;
 };
 

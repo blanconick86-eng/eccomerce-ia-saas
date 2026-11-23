@@ -1,30 +1,59 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  DEFAULT_FROM_EMAIL,
+  formatReplySubject,
+  parseEmailCredentials,
+  parseEmailThreadMeta,
+  sendStoreEmailReply,
+} from "@/lib/email/resend";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import { messageModerationSchema } from "@/lib/validation/ai";
 import type { ChannelSummary, Conversation, Message } from "@/types/database";
+
+type ChannelWithCreds = ChannelSummary & {
+  credentials?: unknown;
+};
 
 type RawConversationRow = Conversation & {
   channels?: ChannelSummary | ChannelSummary[] | null;
 };
 
-function normalizeChannelRelation(
-  relation: RawConversationRow["channels"]
-): ChannelSummary | null {
+function normalizeChannelWithCreds(relation: unknown): ChannelWithCreds | null {
   if (!relation) return null;
   const candidate = Array.isArray(relation) ? relation[0] : relation;
   if (
     candidate &&
-    typeof candidate.id === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.type === "string"
+    typeof candidate === "object" &&
+    typeof (candidate as { id?: unknown }).id === "string" &&
+    typeof (candidate as { name?: unknown }).name === "string" &&
+    typeof (candidate as { type?: unknown }).type === "string"
   ) {
+    const row = candidate as {
+      id: string;
+      name: string;
+      type: string;
+      credentials?: unknown;
+    };
     return {
-      id: candidate.id,
-      name: candidate.name,
-      type: candidate.type,
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      credentials: row.credentials,
     };
   }
   return null;
+}
+
+function normalizeChannelRelation(
+  relation: RawConversationRow["channels"]
+): ChannelSummary | null {
+  const full = normalizeChannelWithCreds(relation);
+  if (!full) return null;
+  return {
+    id: full.id,
+    name: full.name,
+    type: full.type,
+  };
 }
 
 export async function GET() {
@@ -151,7 +180,9 @@ export async function PATCH(request: NextRequest) {
 
   const { data: ownerConv, error: convLookupError } = await supabase
     .from("conversations")
-    .select("id, store_id")
+    .select(
+      "id, store_id, channel_id, external_thread_id, channels(id, name, type, credentials)"
+    )
     .eq("id", targetMessage.conversation_id)
     .eq("store_id", store.id)
     .maybeSingle();
@@ -177,6 +208,57 @@ export async function PATCH(request: NextRequest) {
   const nextMessageStatus = action === "reject" ? "rejected" : "approved";
   const nextConversationStatus =
     action === "reject" ? "rejected" : "resolved";
+
+  const convChannel = normalizeChannelWithCreds(
+    (ownerConv as { channels?: unknown }).channels
+  );
+
+  let emailDelivery:
+    | { sent: true; to: string; subject: string; id: string | null }
+    | undefined;
+
+  if (
+    (action === "approve" || action === "edit_and_approve") &&
+    convChannel?.type === "email"
+  ) {
+    const threadMeta = parseEmailThreadMeta(
+      (ownerConv as { external_thread_id?: string | null }).external_thread_id
+    );
+    if (!threadMeta?.fromEmail) {
+      return NextResponse.json(
+        { error: "Conversation is missing recipient email metadata" },
+        { status: 400 }
+      );
+    }
+
+    const emailCreds = parseEmailCredentials(convChannel.credentials);
+    const finalContent =
+      action === "edit_and_approve" && content
+        ? content
+        : targetMessage.content;
+
+    const sendResult = await sendStoreEmailReply({
+      to: threadMeta.fromEmail,
+      from: emailCreds?.from_email ?? DEFAULT_FROM_EMAIL,
+      replyTo: emailCreds?.support_email,
+      subject: threadMeta.subject,
+      bodyText: finalContent,
+    });
+
+    if (!sendResult.ok) {
+      return NextResponse.json(
+        { error: `Failed to send email via Resend: ${sendResult.error}` },
+        { status: 502 }
+      );
+    }
+
+    emailDelivery = {
+      sent: true,
+      to: threadMeta.fromEmail,
+      subject: formatReplySubject(threadMeta.subject),
+      id: sendResult.id,
+    };
+  }
 
   const updateFields =
     action === "edit_and_approve" && content
@@ -214,5 +296,6 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({
     message: updatedMessage,
     conversationStatus: nextConversationStatus,
+    ...(emailDelivery ? { emailDelivery } : {}),
   });
 }

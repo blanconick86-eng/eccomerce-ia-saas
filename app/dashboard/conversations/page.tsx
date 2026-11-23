@@ -5,9 +5,11 @@ import {
   AlertCircle,
   Bot,
   Check,
+  CheckCircle2,
   Edit3,
   Globe,
   Loader2,
+  Mail,
   MessageCircle,
   Package,
   Send,
@@ -51,6 +53,27 @@ type StatusFilter =
   | "approved"
   | "rejected";
 
+function parseEmailThreadMeta(
+  raw: string | null | undefined
+): { fromEmail: string; subject: string } | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const obj = parsed as Record<string, unknown>;
+    const fromEmail =
+      typeof obj.fromEmail === "string" ? obj.fromEmail.trim() : "";
+    const subject =
+      typeof obj.subject === "string" ? obj.subject.trim() : "";
+    if (!fromEmail) return null;
+    return { fromEmail, subject };
+  } catch {
+    return null;
+  }
+}
+
 const STATUS_STYLE_MAP: Record<string, string> = {
   pending_approval: "bg-amber-50 text-amber-800 ring-amber-200",
   auto_sent: "bg-emerald-50 text-emerald-700 ring-emerald-200",
@@ -88,6 +111,10 @@ export default function ConversationsPage() {
   const [editedContent, setEditedContent] = useState("");
   const [moderatingId, setModeratingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [emailSentBanner, setEmailSentBanner] = useState<{
+    to: string;
+    subject: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,6 +239,7 @@ export default function ConversationsPage() {
     if (moderatingId) return;
     setModeratingId(messageId);
     setActionError(null);
+    setEmailSentBanner(null);
 
     try {
       const response = await fetch("/api/conversations", {
@@ -227,12 +255,24 @@ export default function ConversationsPage() {
       const payload = (await response.json()) as {
         message?: Message;
         conversationStatus?: string;
+        emailDelivery?: {
+          sent?: boolean;
+          to?: string;
+          subject?: string;
+        };
         error?: string;
       };
 
       if (!response.ok || !payload.message) {
         setActionError(payload.error || t.dashboard.conversations.actionError);
         return;
+      }
+
+      if (payload.emailDelivery?.sent && payload.emailDelivery.to) {
+        setEmailSentBanner({
+          to: payload.emailDelivery.to,
+          subject: payload.emailDelivery.subject ?? "",
+        });
       }
 
       setConversations((prev) =>
@@ -303,6 +343,17 @@ export default function ConversationsPage() {
       return (
         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">
           <MessageCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="truncate">
+            {typeLabel} · {channel.name}
+          </span>
+        </span>
+      );
+    }
+
+    if (channel.type === "email") {
+      return (
+        <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 ring-1 ring-inset ring-teal-200">
+          <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
           <span className="truncate">
             {typeLabel} · {channel.name}
           </span>
@@ -589,6 +640,7 @@ export default function ConversationsPage() {
 
           {channels.map((ch) => {
             const active = channelFilter === ch.id;
+            const FilterIcon = ch.type === "email" ? Mail : Globe;
             return (
               <button
                 key={ch.id}
@@ -600,7 +652,7 @@ export default function ConversationsPage() {
                     : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <Globe className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <FilterIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
                 <span>
                   {getChannelTypeLabel(ch.type)} · {ch.name}
                 </span>
@@ -640,6 +692,20 @@ export default function ConversationsPage() {
         >
           <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" aria-hidden="true" />
           <span>{actionError}</span>
+        </div>
+      )}
+
+      {emailSentBanner && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">
+          <CheckCircle2
+            className="h-4 w-4 shrink-0 text-emerald-600"
+            aria-hidden="true"
+          />
+          <span>
+            {t.dashboard.conversations.emailSentSuccess}{" "}
+            <strong className="font-semibold">{emailSentBanner.to}</strong>
+            {emailSentBanner.subject ? ` (${emailSentBanner.subject})` : ""}.
+          </span>
         </div>
       )}
 
@@ -737,6 +803,33 @@ export default function ConversationsPage() {
                         .replace("T", " ")}{" "}
                       · {activeConversation.language.toUpperCase()}
                     </p>
+                    {(() => {
+                      const emailMeta =
+                        activeConversation.channel?.type === "email"
+                          ? parseEmailThreadMeta(
+                              activeConversation.external_thread_id
+                            )
+                          : null;
+                      if (!emailMeta) return null;
+                      return (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-teal-200/80 bg-teal-50/60 px-2.5 py-1 text-xs text-teal-900">
+                          <span>
+                            <strong>
+                              {t.dashboard.conversations.emailFromLabel}:
+                            </strong>{" "}
+                            {emailMeta.fromEmail}
+                          </span>
+                          {emailMeta.subject && (
+                            <span>
+                              <strong>
+                                {t.dashboard.conversations.emailSubjectLabel}:
+                              </strong>{" "}
+                              {emailMeta.subject}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <span
                     className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${

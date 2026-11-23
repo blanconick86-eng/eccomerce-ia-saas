@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { DEFAULT_FROM_EMAIL } from "@/lib/email/resend";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import {
   createChannelSchema,
@@ -14,7 +15,7 @@ export async function GET() {
   const { supabase, store } = auth;
   const { data, error } = await supabase
     .from("channels")
-    .select("id, store_id, name, type, created_at")
+    .select("id, store_id, name, type, credentials, created_at")
     .eq("store_id", store.id)
     .order("created_at", { ascending: false });
 
@@ -54,14 +55,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const credentials =
+    parsed.data.type === "email"
+      ? {
+          support_email: parsed.data.credentials!.support_email!.trim(),
+          from_email:
+            parsed.data.credentials?.from_email?.trim() || DEFAULT_FROM_EMAIL,
+        }
+      : undefined;
+
   const { data, error } = await supabase
     .from("channels")
     .insert({
       store_id: store.id,
       name: parsed.data.name,
       type: parsed.data.type,
+      ...(credentials ? { credentials } : {}),
     })
-    .select("id, store_id, name, type, created_at")
+    .select("id, store_id, name, type, credentials, created_at")
     .single();
 
   if (error) {
