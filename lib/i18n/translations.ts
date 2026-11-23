@@ -526,7 +526,7 @@ export const translations = {
       conversations: {
         title: "Conversaciones y Simulador IA",
         subtitle:
-          "Probá respuestas en vivo con Gemini y moderá la cola de mensajes pendientes.",
+          "Probá respuestas en vivo con Groq y moderá la cola de mensajes pendientes.",
         simulatorTitle: "Simulador de cliente",
         simulatorSubtitle:
           "Escribí una pregunta como si fueras un comprador para ver la clasificación, las reglas de seguridad y la respuesta generada.",
@@ -681,7 +681,7 @@ export const translations = {
           testBodyPlaceholder:
             "Hola, ¿tienen unidades disponibles y cuánto tarda el envío?",
           sendTestBtn: "Enviar prueba al webhook",
-          sendingTest: "Procesando con Gemini y Resend...",
+          sendingTest: "Procesando con Groq y Resend...",
           testSuccessAutoSent:
             "Respuesta generada y enviada automáticamente por email con Resend.",
           testSuccessPending:
@@ -872,7 +872,7 @@ export const translations = {
         integrationsSubtitle:
           "Estado de la autenticación, base de datos y motor de IA.",
         connectedAuth: "Conectado (Auth y RLS)",
-        connectedGemini: "Conectado (gemini-3.6-flash)",
+        connectedGemini: "Conectado (llama-3.3-70b-versatile)",
         notConnected: "No conectado",
       },
     },
@@ -1401,7 +1401,7 @@ export const translations = {
       conversations: {
         title: "Conversations & AI Simulator",
         subtitle:
-          "Test Gemini responses live and review pending customer replies.",
+          "Test Groq responses live and review pending customer replies.",
         simulatorTitle: "Customer simulator",
         simulatorSubtitle:
           "Enter a test customer message to inspect topic classification, safety checks, and the generated reply.",
@@ -1556,7 +1556,7 @@ export const translations = {
           testBodyPlaceholder:
             "Hi, do you have this item in stock and how fast is delivery?",
           sendTestBtn: "Send test to webhook",
-          sendingTest: "Processing with Gemini & Resend...",
+          sendingTest: "Processing with Groq & Resend...",
           testSuccessAutoSent:
             "Reply generated and auto-sent via email with Resend.",
           testSuccessPending:
@@ -1747,7 +1747,7 @@ export const translations = {
         integrationsSubtitle:
           "Authentication, database, and AI engine connection status.",
         connectedAuth: "Connected (Auth & RLS)",
-        connectedGemini: "Connected (gemini-3.6-flash)",
+        connectedGemini: "Connected (llama-3.3-70b-versatile)",
         notConnected: "Not connected",
       },
     },

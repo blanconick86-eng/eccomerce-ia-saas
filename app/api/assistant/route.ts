@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runStoreAssistant } from "@/lib/ai/assistant-service";
-import { isGeminiConfigured } from "@/lib/ai/gemini";
+import { isGroqConfigured } from "@/lib/ai/groq";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import { assistantRequestSchema } from "@/lib/validation/ai";
 
@@ -10,9 +10,10 @@ export async function POST(request: NextRequest) {
     return auth.errorResponse;
   }
 
-  if (!isGeminiConfigured()) {
+  if (!isGroqConfigured()) {
+    console.error("[Assistant API] GROQ_API_KEY is not configured on the server.");
     return NextResponse.json(
-      { error: "GEMINI_API_KEY is not configured on the server." },
+      { error: "GROQ_API_KEY is not configured on the server." },
       { status: 500 }
     );
   }

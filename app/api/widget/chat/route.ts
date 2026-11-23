@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runStoreAssistant } from "@/lib/ai/assistant-service";
-import { isGeminiConfigured } from "@/lib/ai/gemini";
+import { isGroqConfigured } from "@/lib/ai/groq";
 import {
   createAdminClient,
   isSupabaseAdminConfigured,
@@ -30,9 +30,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!isGeminiConfigured()) {
+  if (!isGroqConfigured()) {
+    console.error("[Widget Chat API] GROQ_API_KEY is not configured on the server.");
     return jsonCors(
-      { error: "GEMINI_API_KEY is not configured on the server." },
+      { error: "GROQ_API_KEY is not configured on the server." },
       500
     );
   }

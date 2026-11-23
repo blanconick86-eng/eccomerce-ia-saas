@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/language-context";
-import type { SafetyReason } from "@/lib/ai/gemini";
+import type { SafetyReason } from "@/lib/ai/groq";
 import type { QueryClassification } from "@/lib/validation/ai";
 import type {
   ChannelSummary,

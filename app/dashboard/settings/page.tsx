@@ -228,7 +228,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <span className="text-sm font-medium text-slate-800">
-                Google Gemini API
+                Groq AI API
               </span>
               <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
                 {t.dashboard.settings.connectedGemini}

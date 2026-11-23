@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import {
   ASSISTANT_TOPICS,
   classificationSchema,
@@ -9,12 +8,34 @@ import {
 } from "@/lib/validation/ai";
 import type { Message, Policy, Product } from "@/types/database";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
-export const GEMINI_MODEL = DEFAULT_GEMINI_MODEL;
+export const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
+export const DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile";
 
-export function getGeminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+export function getGroqModel(): string {
+  return process.env.GROQ_MODEL?.trim() || DEFAULT_GROQ_MODEL;
 }
+
+export function isGroqConfigured(): boolean {
+  return Boolean(process.env.GROQ_API_KEY?.trim());
+}
+
+type GroqChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
+
+type GroqCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+    };
+  }>;
+  error?: {
+    message?: string;
+    type?: string;
+    code?: string;
+  };
+};
 
 const STOPWORDS = new Set([
   "el",
@@ -84,18 +105,6 @@ const STOPWORDS = new Set([
   "can",
   "about",
 ]);
-
-function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY environment variable.");
-  }
-  return new GoogleGenAI({ apiKey });
-}
-
-export function isGeminiConfigured(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
-}
 
 function normalizeText(value: string): string {
   return value
@@ -220,7 +229,7 @@ function stripJsonFences(text: string): string {
   return withoutFences;
 }
 
-export function formatGeminiErrorMessage(error: unknown): string {
+export function formatGroqErrorMessage(error: unknown): string {
   const rawMessage =
     error instanceof Error ? error.message : String(error ?? "Unknown error");
 
@@ -239,7 +248,93 @@ export function formatGeminiErrorMessage(error: unknown): string {
     }
   }
 
-  return trimmed || "Unknown Gemini API error";
+  return trimmed || "Unknown Groq API error";
+}
+
+async function callGroqChatCompletion(params: {
+  messages: GroqChatMessage[];
+  temperature: number;
+  jsonMode?: boolean;
+  label: string;
+}): Promise<string> {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) {
+    const missingErr = new Error("Missing GROQ_API_KEY environment variable.");
+    console.error(`[${params.label}] Configuration error:`, missingErr.message);
+    throw missingErr;
+  }
+
+  const model = getGroqModel();
+  const payload = {
+    model,
+    messages: params.messages,
+    temperature: params.temperature,
+    ...(params.jsonMode ? { response_format: { type: "json_object" } } : {}),
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(GROQ_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (networkError) {
+    console.error(`[${params.label}] Groq fetch network failure:`, {
+      model,
+      error: networkError,
+    });
+    throw networkError;
+  }
+
+  const rawBody = await response.text();
+  if (!response.ok) {
+    let detail = rawBody || response.statusText || "Unknown Groq error";
+    try {
+      const parsedErr = JSON.parse(rawBody) as GroqCompletionResponse;
+      if (parsedErr?.error?.message) {
+        detail = parsedErr.error.message;
+      }
+    } catch {
+      // Keep rawBody when response is not JSON
+    }
+
+    console.error(`[${params.label}] Groq API returned error:`, {
+      status: response.status,
+      statusText: response.statusText,
+      model,
+      detail,
+      rawBody,
+    });
+
+    throw new Error(`Groq API error (${response.status}): ${detail}`);
+  }
+
+  let parsedJson: GroqCompletionResponse;
+  try {
+    parsedJson = JSON.parse(rawBody) as GroqCompletionResponse;
+  } catch (parseErr) {
+    console.error(`[${params.label}] Failed to parse Groq HTTP JSON body:`, {
+      model,
+      rawBody,
+      parseErr,
+    });
+    throw new Error("Groq returned invalid JSON response.");
+  }
+
+  const content = parsedJson.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) {
+    console.error(`[${params.label}] Empty completion content from Groq:`, {
+      model,
+      parsedJson,
+    });
+    throw new Error("Groq returned an empty completion message.");
+  }
+
+  return content;
 }
 
 export async function classifyCustomerQuery(params: {
@@ -253,12 +348,27 @@ export async function classifyCustomerQuery(params: {
     params;
   const fallbackLanguage = inferFallbackLanguage(message, storeLanguage);
 
-  const ai = getGeminiClient();
+  const systemInstruction = [
+    "You are a strict JSON classifier for e-commerce customer support triage. Never guess missing information.",
+    "Always respond with a single JSON object matching this exact schema:",
+    JSON.stringify({
+      topic: ASSISTANT_TOPICS,
+      language: ["es", "en"],
+      has_sufficient_info: "boolean",
+      requires_human: "boolean",
+    }),
+  ].join("\n");
 
   const classificationPrompt = [
     "Classify the customer support message for an e-commerce store and return JSON only.",
     "",
-    "Allowed topic values:",
+    "Required JSON keys:",
+    `- "topic": one of ${ASSISTANT_TOPICS.join(" | ")}`,
+    '- "language": "es" | "en"',
+    '- "has_sufficient_info": boolean',
+    '- "requires_human": boolean',
+    "",
+    "Allowed topic meanings:",
     "- products: product availability, price, specs, sizing, recommendations, catalog items",
     "- shipping: delivery times, shipping fees, coverage areas, tracking rules",
     "- returns: return window, exchange policy, return conditions",
@@ -283,39 +393,15 @@ export async function classifyCustomerQuery(params: {
     `Customer message: """${message}"""`,
   ].join("\n");
 
-  let responseText = "";
-  try {
-    const response = await ai.models.generateContent({
-      model: getGeminiModel(),
-      contents: classificationPrompt,
-      config: {
-        temperature: 0,
-        responseMimeType: "application/json",
-        responseJsonSchema: {
-          type: "object",
-          properties: {
-            topic: { type: "string", enum: [...ASSISTANT_TOPICS] },
-            language: { type: "string", enum: ["es", "en"] },
-            has_sufficient_info: { type: "boolean" },
-            requires_human: { type: "boolean" },
-          },
-          required: [
-            "topic",
-            "language",
-            "has_sufficient_info",
-            "requires_human",
-          ],
-          additionalProperties: false,
-        },
-        systemInstruction:
-          "You are a strict JSON classifier for e-commerce customer support triage. Never guess missing information.",
-      },
-    });
-    responseText = response.text ?? "";
-  } catch (apiError) {
-    console.error("[Gemini Classifier] Gemini API error:", apiError);
-    throw apiError;
-  }
+  const responseText = await callGroqChatCompletion({
+    label: "Groq Classifier",
+    temperature: 0,
+    jsonMode: true,
+    messages: [
+      { role: "system", content: systemInstruction },
+      { role: "user", content: classificationPrompt },
+    ],
+  });
 
   try {
     const cleanedJson = stripJsonFences(responseText);
@@ -327,11 +413,12 @@ export async function classifyCustomerQuery(params: {
     }
 
     console.error(
-      "[Gemini Classifier] Classification schema validation failed:",
-      validated.error.issues
+      "[Groq Classifier] Classification schema validation failed:",
+      validated.error.issues,
+      { responseText }
     );
   } catch (parseError) {
-    console.error("[Gemini Classifier] Failed to parse structured JSON:", {
+    console.error("[Groq Classifier] Failed to parse structured JSON:", {
       parseError,
       responseText,
     });
@@ -417,15 +504,7 @@ export async function generateAssistantReply(params: {
         ? "Polite, structured, and formal."
         : "Direct, brief, and to the point.";
 
-  const historyText =
-    history.length > 0
-      ? history
-          .slice(-6)
-          .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-          .join("\n")
-      : "None";
-
-  const systemInstruction = [
+  const systemPrompt = [
     `You are the AI customer support assistant for "${storeName}".`,
     `Write your reply strictly in ${targetLanguage === "en" ? "English" : "Spanish"}.`,
     `Tone: ${toneDirective}`,
@@ -437,9 +516,7 @@ export async function generateAssistantReply(params: {
     "4. NEVER confirm, promise, or execute refunds, return approvals, or order changes/cancellations. Politely state that a human support specialist will review and handle the request.",
     "5. If the customer asks about a product, SKU, price, or policy detail that is NOT in the provided context, clearly and honestly admit that you do not have that information in the store's records.",
     "6. When referencing a product from the catalog, cite its exact SKU and exact listed price/stock status.",
-  ].join("\n");
-
-  const prompt = [
+    "",
     `Classification: topic=${classification.topic}, has_sufficient_info=${classification.has_sufficient_info}, requires_human=${classification.requires_human}`,
     "",
     "Retrieved Store Products:",
@@ -447,26 +524,28 @@ export async function generateAssistantReply(params: {
     "",
     "Store Policies:",
     formatPoliciesContext(policies),
-    "",
-    "Recent Conversation History:",
-    historyText,
-    "",
-    `Latest Customer Message: """${message}"""`,
-    "",
-    "Draft the final customer-facing response following all mandatory rules:",
   ].join("\n");
 
-  const ai = getGeminiClient();
-  const response = await ai.models.generateContent({
-    model: getGeminiModel(),
-    contents: prompt,
-    config: {
-      temperature: 0.2,
-      systemInstruction,
-    },
-  });
+  const messages: GroqChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...history.slice(-6).map(
+      (m): GroqChatMessage => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      })
+    ),
+    { role: "user", content: message },
+  ];
 
-  const text = response.text?.trim();
+  const text = (
+    await callGroqChatCompletion({
+      label: "Groq Reply",
+      temperature: 0.2,
+      jsonMode: false,
+      messages,
+    })
+  ).trim();
+
   if (text) {
     return text;
   }

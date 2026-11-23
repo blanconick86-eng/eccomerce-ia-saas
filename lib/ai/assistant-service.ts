@@ -2,11 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   classifyCustomerQuery,
   evaluateAssistantStatus,
-  formatGeminiErrorMessage,
+  formatGroqErrorMessage,
   generateAssistantReply,
   retrieveRelevantProducts,
   type SafetyReason,
-} from "@/lib/ai/gemini";
+} from "@/lib/ai/groq";
 import {
   AI_LANGUAGES,
   AI_TONES,
@@ -50,7 +50,7 @@ export type RunStoreAssistantResult =
     };
 
 /**
- * Runs the full store-grounded retrieval, Gemini classification, deterministic safety
+ * Runs the full store-grounded retrieval, Groq classification, deterministic safety
  * evaluation, reply generation, and Supabase persistence pipeline.
  */
 export async function runStoreAssistant(params: {
@@ -214,11 +214,15 @@ export async function runStoreAssistant(params: {
       storeName: store.name,
     });
   } catch (error) {
-    console.error("[Assistant Service] Gemini request failed:", error);
+    console.error("[Assistant Service] Groq request failed:", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      error,
+    });
     const publicError =
       process.env.NODE_ENV !== "production"
-        ? formatGeminiErrorMessage(error)
-        : "Failed to generate assistant reply with Gemini.";
+        ? formatGroqErrorMessage(error)
+        : "Failed to generate assistant reply with Groq.";
 
     return { ok: false, status: 502, error: publicError };
   }
