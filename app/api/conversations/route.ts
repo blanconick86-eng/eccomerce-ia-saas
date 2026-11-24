@@ -1,11 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  DEFAULT_FROM_EMAIL,
   formatReplySubject,
-  parseEmailCredentials,
   parseEmailThreadMeta,
   sendStoreEmailReply,
-} from "@/lib/email/resend";
+} from "@/lib/email/brevo";
 import {
   isSimulatedMercadoLibreChannel,
   parseMercadoLibreThreadMeta,
@@ -243,7 +241,6 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const emailCreds = parseEmailCredentials(convChannel.credentials);
     const finalContent =
       action === "edit_and_approve" && content
         ? content
@@ -251,15 +248,17 @@ export async function PATCH(request: NextRequest) {
 
     const sendResult = await sendStoreEmailReply({
       to: threadMeta.fromEmail,
-      from: emailCreds?.from_email ?? DEFAULT_FROM_EMAIL,
-      replyTo: emailCreds?.support_email,
       subject: threadMeta.subject,
       bodyText: finalContent,
     });
 
     if (!sendResult.ok) {
+      console.error(
+        "[Conversations API] Failed to send email via Brevo:",
+        sendResult.error
+      );
       return NextResponse.json(
-        { error: `Failed to send email via Resend: ${sendResult.error}` },
+        { error: `Failed to send email via Brevo: ${sendResult.error}` },
         { status: 502 }
       );
     }

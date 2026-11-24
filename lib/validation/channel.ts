@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_FROM_EMAIL } from "@/lib/email/resend";
+import { DEFAULT_FROM_EMAIL } from "@/lib/email/brevo";
 import { DEFAULT_MELI_SELLER_NICKNAME } from "@/lib/mercadolibre/simulated";
 
 export const CHANNEL_TYPES = [

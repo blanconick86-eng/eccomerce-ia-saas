@@ -1,8 +1,9 @@
-import { Resend } from "resend";
-
-export const DEFAULT_FROM_EMAIL = "StoreOne <onboarding@resend.dev>";
+export const DEFAULT_SENDER_NAME = "StoreOne Soporte";
+export const DEFAULT_FROM_EMAIL = "StoreOne Soporte";
 export const INBOUND_EMAIL_WEBHOOK_URL =
   "https://storeonlyinone.vercel.app/api/webhooks/email";
+
+const BREVO_SMTP_EMAIL_URL = "https://api.brevo.com/v3/smtp/email";
 
 export type EmailChannelCredentials = {
   support_email: string;
@@ -14,8 +15,10 @@ export type EmailThreadMeta = {
   subject: string;
 };
 
-export function isResendConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY?.trim());
+export function isBrevoConfigured(): boolean {
+  return Boolean(
+    process.env.BREVO_API_KEY?.trim() && process.env.BREVO_SENDER_EMAIL?.trim()
+  );
 }
 
 export function parseEmailCredentials(
@@ -93,53 +96,100 @@ export function formatReplySubject(subject: string): string {
 
 export async function sendStoreEmailReply(params: {
   to: string;
-  from?: string;
-  replyTo?: string;
   subject: string;
   bodyText: string;
 }): Promise<{ ok: true; id: string | null } | { ok: false; error: string }> {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const apiKey = process.env.BREVO_API_KEY?.trim();
   if (!apiKey) {
+    console.error("[Brevo] BREVO_API_KEY is not configured on the server.");
     return {
       ok: false,
-      error: "RESEND_API_KEY is not configured on the server.",
+      error: "BREVO_API_KEY is not configured on the server.",
     };
   }
+
+  const senderEmail = process.env.BREVO_SENDER_EMAIL?.trim();
+  if (!senderEmail) {
+    console.error(
+      "[Brevo] BREVO_SENDER_EMAIL is not configured on the server."
+    );
+    return {
+      ok: false,
+      error: "BREVO_SENDER_EMAIL is not configured on the server.",
+    };
+  }
+
+  const senderName =
+    process.env.BREVO_SENDER_NAME?.trim() || DEFAULT_SENDER_NAME;
 
   const recipient = params.to.trim();
   if (!recipient) {
     return { ok: false, error: "Recipient email address is missing." };
   }
 
-  const resend = new Resend(apiKey);
-  const from = params.from?.trim() || DEFAULT_FROM_EMAIL;
-  const replyTo = params.replyTo?.trim();
   const subject = formatReplySubject(params.subject);
 
   try {
-    const { data, error } = await resend.emails.send({
-      from,
-      to: [recipient],
-      subject,
-      text: params.bodyText,
-      ...(replyTo ? { replyTo } : {}),
+    const response = await fetch(BREVO_SMTP_EMAIL_URL, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": apiKey,
+      },
+      body: JSON.stringify({
+        sender: {
+          name: senderName,
+          email: senderEmail,
+        },
+        to: [{ email: recipient }],
+        subject,
+        textContent: params.bodyText,
+      }),
     });
 
-    if (error) {
+    const rawResponseText = await response.text();
+
+    if (!response.ok) {
+      const errorDetail = rawResponseText.trim()
+        ? `Brevo API error (${response.status}): ${rawResponseText.trim()}`
+        : `Brevo API error (${response.status} ${response.statusText})`;
+
+      console.error("[Brevo] Email send failed:", {
+        status: response.status,
+        statusText: response.statusText,
+        body: rawResponseText,
+        to: recipient,
+        subject,
+      });
+
       return {
         ok: false,
-        error: error.message || "Resend API rejected the email request.",
+        error: errorDetail,
       };
     }
 
-    return { ok: true, id: data?.id ?? null };
+    let messageId: string | null = null;
+    if (rawResponseText.trim()) {
+      try {
+        const data = JSON.parse(rawResponseText) as { messageId?: unknown };
+        if (typeof data?.messageId === "string") {
+          messageId = data.messageId;
+        }
+      } catch {
+        messageId = null;
+      }
+    }
+
+    return { ok: true, id: messageId };
   } catch (err: unknown) {
+    console.error("[Brevo] Unexpected fetch error:", err);
     return {
       ok: false,
       error:
         err instanceof Error
           ? err.message
-          : "Unexpected error sending email with Resend.",
+          : "Unexpected error sending email with Brevo.",
     };
   }
 }

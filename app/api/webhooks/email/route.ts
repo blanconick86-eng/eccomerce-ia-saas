@@ -2,12 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { runStoreAssistant } from "@/lib/ai/assistant-service";
 import { isGroqConfigured } from "@/lib/ai/groq";
 import {
-  DEFAULT_FROM_EMAIL,
   encodeEmailThreadMeta,
   formatReplySubject,
-  parseEmailCredentials,
   sendStoreEmailReply,
-} from "@/lib/email/resend";
+} from "@/lib/email/brevo";
 import {
   createAdminClient,
   isSupabaseAdminConfigured,
@@ -141,17 +139,17 @@ export async function POST(request: NextRequest) {
   const replySubject = formatReplySubject(subject);
 
   if (decision.messageStatus === "auto_sent") {
-    const emailCreds = parseEmailCredentials(channel.credentials);
     const sendResult = await sendStoreEmailReply({
       to: fromEmail,
-      from: emailCreds?.from_email ?? DEFAULT_FROM_EMAIL,
-      replyTo: emailCreds?.support_email,
       subject,
       bodyText: assistantMessage.content,
     });
 
     if (!sendResult.ok) {
-      console.error("[Email Webhook] Resend send failed:", sendResult.error);
+      console.error(
+        "[Email Webhook] Failed to send email via Brevo:",
+        sendResult.error
+      );
     }
 
     return jsonCors({
@@ -169,7 +167,9 @@ export async function POST(request: NextRequest) {
         to: fromEmail,
         subject: replySubject,
         id: sendResult.ok ? sendResult.id : null,
-        error: sendResult.ok ? null : sendResult.error,
+        error: sendResult.ok
+          ? null
+          : `Failed to send email via Brevo: ${sendResult.error}`,
       },
     });
   }

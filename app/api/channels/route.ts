@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DEFAULT_FROM_EMAIL } from "@/lib/email/resend";
+import { DEFAULT_FROM_EMAIL } from "@/lib/email/brevo";
 import { DEFAULT_MELI_SELLER_NICKNAME } from "@/lib/mercadolibre/simulated";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import {

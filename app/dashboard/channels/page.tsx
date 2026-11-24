@@ -36,7 +36,7 @@ import {
 } from "@/lib/mercadolibre/simulated";
 import type { Channel } from "@/types/database";
 
-const DEFAULT_FROM_EMAIL = "StoreOne <onboarding@resend.dev>";
+const DEFAULT_FROM_EMAIL = "StoreOne Soporte";
 const INBOUND_WEBHOOK_URL =
   "https://storeonlyinone.vercel.app/api/webhooks/email";
 
@@ -579,7 +579,7 @@ export default function ChannelsPage() {
         </div>
       )}
 
-      {/* Channel setup cards: Web Widget & Email (Resend) */}
+      {/* Channel setup cards: Web Widget & Email (Brevo) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Create new Web Widget channel */}
         <section className="flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-xs">
@@ -639,7 +639,7 @@ export default function ChannelsPage() {
           </form>
         </section>
 
-        {/* Active Email (Resend) channel setup */}
+        {/* Active Email (Brevo) channel setup */}
         <section className="rounded-2xl border border-teal-200/90 bg-white p-6 shadow-xs">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
@@ -1604,7 +1604,7 @@ export default function ChannelsPage() {
                                       .testEmailFailedPrefix
                                   }{" "}
                                   {testResult.emailDelivery?.error ??
-                                    "Unknown Resend error"}
+                                    "Unknown Brevo error"}
                                 </p>
                               )
                             ) : (

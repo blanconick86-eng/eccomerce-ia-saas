@@ -570,7 +570,7 @@ export const translations = {
         },
         emailFromLabel: "De",
         emailSubjectLabel: "Asunto",
-        emailSentSuccess: "Correo enviado con Resend a",
+        emailSentSuccess: "Correo enviado con Brevo a",
         mlListingLabel: "Publicación",
         mlBuyerLabel: "Comprador",
         mlSimulatedBadge: "Modo simulado",
@@ -652,10 +652,10 @@ export const translations = {
         createError: "No pudimos crear el canal.",
         deleteError: "No pudimos eliminar el canal.",
         emailSection: {
-          title: "Correo electrónico (Resend)",
+          title: "Correo electrónico (Brevo)",
           subtitle:
-            "Conectá tu email de soporte para recibir consultas en la bandeja unificada y responder desde StoreOne con Resend.",
-          activeBadge: "Activo · Resend",
+            "Conectá tu email de soporte para recibir consultas en la bandeja unificada y responder desde StoreOne con Brevo.",
+          activeBadge: "Activo · Brevo",
           channelBadge: "Email",
           nameLabel: "Nombre del canal",
           namePlaceholder: "Ej: Soporte Email",
@@ -663,7 +663,7 @@ export const translations = {
           supportEmailPlaceholder: "soporte@tutienda.com",
           fromEmailLabel: "Remitente saliente (from_email)",
           fromEmailHelper:
-            "Usá StoreOne <onboarding@resend.dev> para pruebas o un remitente de tu dominio verificado en Resend.",
+            "El envío saliente usa el remitente verificado en Brevo (BREVO_SENDER_EMAIL y BREVO_SENDER_NAME).",
           connectBtn: "Conectar correo electrónico",
           connecting: "Conectando...",
           webhookTitle: "URL de Webhook de entrada",
@@ -680,13 +680,13 @@ export const translations = {
           testBodyPlaceholder:
             "Hola, ¿tienen unidades disponibles y cuánto tarda el envío?",
           sendTestBtn: "Enviar prueba al webhook",
-          sendingTest: "Procesando con Groq y Resend...",
+          sendingTest: "Procesando con Groq y Brevo...",
           testSuccessAutoSent:
-            "Respuesta generada y enviada automáticamente por email con Resend.",
+            "Respuesta generada y enviada automáticamente por email con Brevo.",
           testSuccessPending:
             "El mensaje quedó en pending_approval en la bandeja unificada para revisión manual.",
           testEmailFailedPrefix:
-            "Se generó la respuesta (auto_sent), pero Resend devolvió:",
+            "Se generó la respuesta (auto_sent), pero Brevo devolvió:",
           goToConversationsBtn: "Abrir Bandeja Unificada",
           testError: "No pudimos simular el correo entrante.",
         },
@@ -1476,7 +1476,7 @@ export const translations = {
         },
         emailFromLabel: "From",
         emailSubjectLabel: "Subject",
-        emailSentSuccess: "Email sent via Resend to",
+        emailSentSuccess: "Email sent via Brevo to",
         mlListingLabel: "Listing",
         mlBuyerLabel: "Buyer",
         mlSimulatedBadge: "Simulated mode",
@@ -1558,10 +1558,10 @@ export const translations = {
         createError: "Could not create channel.",
         deleteError: "Could not delete channel.",
         emailSection: {
-          title: "Email (Resend)",
+          title: "Email (Brevo)",
           subtitle:
-            "Connect your support email so inbound customer emails enter the unified inbox and approved replies send via Resend.",
-          activeBadge: "Active · Resend",
+            "Connect your support email so inbound customer emails enter the unified inbox and approved replies send via Brevo.",
+          activeBadge: "Active · Brevo",
           channelBadge: "Email",
           nameLabel: "Channel name",
           namePlaceholder: "e.g., Support Email",
@@ -1569,7 +1569,7 @@ export const translations = {
           supportEmailPlaceholder: "support@yourstore.com",
           fromEmailLabel: "Outbound sender (from_email)",
           fromEmailHelper:
-            "Keep StoreOne <onboarding@resend.dev> for testing or use your verified Resend domain sender.",
+            "Outbound replies use your verified Brevo sender configured on the server (BREVO_SENDER_EMAIL and BREVO_SENDER_NAME).",
           connectBtn: "Connect email channel",
           connecting: "Connecting...",
           webhookTitle: "Inbound Webhook URL",
@@ -1586,13 +1586,13 @@ export const translations = {
           testBodyPlaceholder:
             "Hi, do you have this item in stock and how fast is delivery?",
           sendTestBtn: "Send test to webhook",
-          sendingTest: "Processing with Groq & Resend...",
+          sendingTest: "Processing with Groq & Brevo...",
           testSuccessAutoSent:
-            "Reply generated and auto-sent via email with Resend.",
+            "Reply generated and auto-sent via email with Brevo.",
           testSuccessPending:
             "Reply queued as pending_approval in the unified inbox for review.",
           testEmailFailedPrefix:
-            "Reply generated (auto_sent), but Resend returned:",
+            "Reply generated (auto_sent), but Brevo returned:",
           goToConversationsBtn: "Open Unified Inbox",
           testError: "Could not simulate the inbound email.",
         },
