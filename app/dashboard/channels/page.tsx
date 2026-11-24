@@ -29,6 +29,11 @@ import {
   X,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/language-context";
+import {
+  DEFAULT_MELI_CHANNEL_NAME,
+  DEFAULT_MELI_SELLER_NICKNAME,
+  parseMercadoLibreCredentials,
+} from "@/lib/mercadolibre/simulated";
 import type { Channel } from "@/types/database";
 
 const DEFAULT_FROM_EMAIL = "StoreOne <onboarding@resend.dev>";
@@ -107,14 +112,26 @@ type EmailTestResponse = {
   error?: string;
 };
 
+type MercadoLibreSimResponse = {
+  simulated?: boolean;
+  conversationId?: string;
+  messageId?: string;
+  status?: "auto_sent" | "pending_approval";
+  reply?: string;
+  metadata?: {
+    item_title?: string;
+    buyer_nickname?: string;
+    mode?: string;
+  };
+  error?: string;
+};
+
 const UPCOMING_ICON_MAP = {
-  mercadolibre: ShoppingBag,
   amazon: Package,
   whatsapp: MessageCircle,
 } as const;
 
 const UPCOMING_COLOR_MAP = {
-  mercadolibre: "bg-amber-50 text-amber-600 ring-amber-200",
   amazon: "bg-orange-50 text-orange-600 ring-orange-200",
   whatsapp: "bg-emerald-50 text-emerald-600 ring-emerald-200",
 } as const;
@@ -135,6 +152,24 @@ export default function ChannelsPage() {
   const [supportEmail, setSupportEmail] = useState("");
   const [fromEmail, setFromEmail] = useState(DEFAULT_FROM_EMAIL);
   const [isCreatingEmail, setIsCreatingEmail] = useState(false);
+
+  // Mercado Libre (simulated) channel creation & simulator
+  const [mlName, setMlName] = useState(DEFAULT_MELI_CHANNEL_NAME);
+  const [mlSellerNickname, setMlSellerNickname] = useState(
+    DEFAULT_MELI_SELLER_NICKNAME
+  );
+  const [isCreatingMeli, setIsCreatingMeli] = useState(false);
+  const [mlBuyerNickname, setMlBuyerNickname] = useState("COMPRADOR_AR");
+  const [mlItemTitle, setMlItemTitle] = useState(
+    "Zapatillas Running Pro Talle 42"
+  );
+  const [mlQuestionText, setMlQuestionText] = useState(
+    "Hola! Tenés stock en talle 42? Hacen envíos a Córdoba?"
+  );
+  const [isSendingMeliSim, setIsSendingMeliSim] = useState(false);
+  const [mlSimResult, setMlSimResult] =
+    useState<MercadoLibreSimResponse | null>(null);
+  const [mlSimError, setMlSimError] = useState<string | null>(null);
 
   // Copy & delete & widget preview state
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -336,6 +371,101 @@ export default function ChannelsPage() {
     }
   };
 
+  const activeMeliChannel =
+    channels.find((ch) => ch.type === "mercadolibre") ?? null;
+
+  const handleCreateMercadoLibre = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isCreatingMeli || activeMeliChannel) return;
+
+    const trimmedName = mlName.trim() || DEFAULT_MELI_CHANNEL_NAME;
+    const trimmedSeller =
+      mlSellerNickname.trim() || DEFAULT_MELI_SELLER_NICKNAME;
+
+    setIsCreatingMeli(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          type: "mercadolibre",
+          credentials: {
+            mode: "simulated",
+            seller_nickname: trimmedSeller,
+          },
+        }),
+      });
+
+      const payload = (await response.json()) as {
+        channel?: Channel;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.channel) {
+        setErrorMessage(payload.error || t.dashboard.channels.createError);
+        return;
+      }
+
+      setChannels((prev) => [payload.channel!, ...prev]);
+    } catch {
+      setErrorMessage(t.dashboard.channels.createError);
+    } finally {
+      setIsCreatingMeli(false);
+    }
+  };
+
+  const handleSimulateMercadoLibre = async (
+    event: FormEvent<HTMLFormElement>,
+    channelId: string
+  ) => {
+    event.preventDefault();
+    if (
+      !storeId ||
+      !mlBuyerNickname.trim() ||
+      !mlItemTitle.trim() ||
+      !mlQuestionText.trim() ||
+      isSendingMeliSim
+    ) {
+      return;
+    }
+
+    setIsSendingMeliSim(true);
+    setMlSimResult(null);
+    setMlSimError(null);
+
+    try {
+      const response = await fetch("/api/webhooks/mercadolibre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          simulated: true,
+          storeId,
+          channelId,
+          buyerNickname: mlBuyerNickname.trim(),
+          itemTitle: mlItemTitle.trim(),
+          questionText: mlQuestionText.trim(),
+        }),
+      });
+
+      const payload = (await response.json()) as MercadoLibreSimResponse;
+      if (!response.ok) {
+        setMlSimError(
+          payload.error || t.dashboard.channels.mercadoLibreSection.simError
+        );
+        return;
+      }
+
+      setMlSimResult(payload);
+    } catch {
+      setMlSimError(t.dashboard.channels.mercadoLibreSection.simError);
+    } finally {
+      setIsSendingMeliSim(false);
+    }
+  };
+
   const handleDelete = async (channelId: string) => {
     if (deletingId) return;
     setDeletingId(channelId);
@@ -367,6 +497,10 @@ export default function ChannelsPage() {
         setTestingChannelId(null);
         setTestResult(null);
         setTestError(null);
+      }
+      if (activeMeliChannel?.id === channelId) {
+        setMlSimResult(null);
+        setMlSimError(null);
       }
     } catch {
       setErrorMessage(t.dashboard.channels.deleteError);
@@ -654,6 +788,338 @@ export default function ChannelsPage() {
         </section>
       </div>
 
+      {/* Mercado Libre (Simulated Mode) Card */}
+      <section className="rounded-2xl border border-amber-300/90 bg-white p-6 shadow-xs">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-300">
+              <ShoppingBag className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                {t.dashboard.channels.mercadoLibreSection.title}
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-600">
+                {t.dashboard.channels.mercadoLibreSection.subtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 ring-1 ring-inset ring-amber-300">
+              <span>
+                {t.dashboard.channels.mercadoLibreSection.simulatedBadge}
+              </span>
+            </span>
+            {activeMeliChannel && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                <span>{t.dashboard.channels.connectedBadge}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span>{t.dashboard.channels.loading}</span>
+          </div>
+        ) : !activeMeliChannel ? (
+          <form onSubmit={handleCreateMercadoLibre} className="mt-5 space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="meli-channel-name"
+                  className="block text-xs font-medium text-slate-700"
+                >
+                  {t.dashboard.channels.mercadoLibreSection.nameLabel}
+                </label>
+                <input
+                  id="meli-channel-name"
+                  type="text"
+                  required
+                  maxLength={80}
+                  disabled={isCreatingMeli}
+                  value={mlName}
+                  onChange={(e) => setMlName(e.target.value)}
+                  placeholder={
+                    t.dashboard.channels.mercadoLibreSection.namePlaceholder
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:bg-slate-50"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="meli-seller-nickname"
+                  className="block text-xs font-medium text-slate-700"
+                >
+                  {t.dashboard.channels.mercadoLibreSection.sellerNicknameLabel}
+                </label>
+                <input
+                  id="meli-seller-nickname"
+                  type="text"
+                  maxLength={80}
+                  disabled={isCreatingMeli}
+                  value={mlSellerNickname}
+                  onChange={(e) => setMlSellerNickname(e.target.value)}
+                  placeholder={
+                    t.dashboard.channels.mercadoLibreSection
+                      .sellerNicknamePlaceholder
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:bg-slate-50"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isCreatingMeli}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-xs transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              {isCreatingMeli ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+              )}
+              <span>
+                {isCreatingMeli
+                  ? t.dashboard.channels.mercadoLibreSection.activating
+                  : t.dashboard.channels.mercadoLibreSection.activateBtn}
+              </span>
+            </button>
+          </form>
+        ) : (
+          (() => {
+            const meliCreds = parseMercadoLibreCredentials(
+              activeMeliChannel.credentials
+            );
+            return (
+              <div className="mt-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-950">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                      <strong>{activeMeliChannel.name}</strong>
+                    </span>
+                    <span>
+                      <strong>
+                        {t.dashboard.channels.mercadoLibreSection.sellerLabel}:
+                      </strong>{" "}
+                      <code className="font-mono">
+                        {meliCreds?.seller_nickname ??
+                          DEFAULT_MELI_SELLER_NICKNAME}
+                      </code>
+                    </span>
+                    <span className="text-amber-800/80">
+                      {t.dashboard.channels.channelIdLabel}:{" "}
+                      <code className="font-mono">{activeMeliChannel.id}</code>
+                    </span>
+                  </div>
+                  <Link
+                    href="/dashboard/conversations"
+                    className="font-semibold text-amber-900 underline-offset-2 hover:underline"
+                  >
+                    {
+                      t.dashboard.channels.mercadoLibreSection
+                        .goToConversationsBtn
+                    }{" "}
+                    →
+                  </Link>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  {t.dashboard.channels.mercadoLibreSection.activeHelper}
+                </p>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    {t.dashboard.channels.mercadoLibreSection.simFormTitle}
+                  </h3>
+
+                  <form
+                    onSubmit={(e) =>
+                      handleSimulateMercadoLibre(e, activeMeliChannel.id)
+                    }
+                    className="mt-3 space-y-3"
+                  >
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label
+                          htmlFor="meli-buyer-nickname"
+                          className="block text-xs font-medium text-slate-700"
+                        >
+                          {
+                            t.dashboard.channels.mercadoLibreSection
+                              .simBuyerLabel
+                          }
+                        </label>
+                        <input
+                          id="meli-buyer-nickname"
+                          type="text"
+                          required
+                          maxLength={80}
+                          disabled={isSendingMeliSim}
+                          value={mlBuyerNickname}
+                          onChange={(e) => setMlBuyerNickname(e.target.value)}
+                          placeholder={
+                            t.dashboard.channels.mercadoLibreSection
+                              .simBuyerPlaceholder
+                          }
+                          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:bg-slate-50"
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="meli-item-title"
+                          className="block text-xs font-medium text-slate-700"
+                        >
+                          {
+                            t.dashboard.channels.mercadoLibreSection
+                              .simItemTitleLabel
+                          }
+                        </label>
+                        <input
+                          id="meli-item-title"
+                          type="text"
+                          required
+                          maxLength={300}
+                          disabled={isSendingMeliSim}
+                          value={mlItemTitle}
+                          onChange={(e) => setMlItemTitle(e.target.value)}
+                          placeholder={
+                            t.dashboard.channels.mercadoLibreSection
+                              .simItemTitlePlaceholder
+                          }
+                          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:bg-slate-50"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="meli-question-text"
+                        className="block text-xs font-medium text-slate-700"
+                      >
+                        {
+                          t.dashboard.channels.mercadoLibreSection
+                            .simQuestionLabel
+                        }
+                      </label>
+                      <textarea
+                        id="meli-question-text"
+                        rows={3}
+                        required
+                        maxLength={8000}
+                        disabled={isSendingMeliSim}
+                        value={mlQuestionText}
+                        onChange={(e) => setMlQuestionText(e.target.value)}
+                        placeholder={
+                          t.dashboard.channels.mercadoLibreSection
+                            .simQuestionPlaceholder
+                        }
+                        className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:bg-slate-50"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="submit"
+                        disabled={
+                          isSendingMeliSim ||
+                          !storeId ||
+                          !mlBuyerNickname.trim() ||
+                          !mlItemTitle.trim() ||
+                          !mlQuestionText.trim()
+                        }
+                        className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 shadow-xs transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSendingMeliSim ? (
+                          <Loader2
+                            className="h-3.5 w-3.5 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        <span>
+                          {isSendingMeliSim
+                            ? t.dashboard.channels.mercadoLibreSection
+                                .simSubmitting
+                            : t.dashboard.channels.mercadoLibreSection
+                                .simSubmitBtn}
+                        </span>
+                      </button>
+                    </div>
+                  </form>
+
+                  {mlSimError && (
+                    <div
+                      role="alert"
+                      className="mt-3 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-800"
+                    >
+                      <AlertCircle
+                        className="h-4 w-4 shrink-0 text-rose-600"
+                        aria-hidden="true"
+                      />
+                      <span>{mlSimError}</span>
+                    </div>
+                  )}
+
+                  {mlSimResult && (
+                    <div className="mt-3 space-y-2.5 rounded-xl border border-slate-200 bg-white p-4 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 font-semibold ring-1 ring-inset ${
+                            mlSimResult.status === "auto_sent"
+                              ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                              : "bg-amber-100 text-amber-900 ring-amber-300"
+                          }`}
+                        >
+                          {mlSimResult.status}
+                        </span>
+
+                        <Link
+                          href="/dashboard/conversations"
+                          className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+                        >
+                          {
+                            t.dashboard.channels.mercadoLibreSection
+                              .goToConversationsBtn
+                          }{" "}
+                          →
+                        </Link>
+                      </div>
+
+                      <p
+                        className={`font-medium ${
+                          mlSimResult.status === "auto_sent"
+                            ? "text-emerald-700"
+                            : "text-amber-900"
+                        }`}
+                      >
+                        {mlSimResult.status === "auto_sent"
+                          ? t.dashboard.channels.mercadoLibreSection
+                              .simSuccessAutoSent
+                          : t.dashboard.channels.mercadoLibreSection
+                              .simSuccessPending}
+                      </p>
+
+                      {mlSimResult.reply && (
+                        <p className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-800">
+                          {mlSimResult.reply}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()
+        )}
+      </section>
+
       {/* Connected Channels List */}
       <section className="space-y-4">
         <div>
@@ -686,8 +1152,143 @@ export default function ChannelsPage() {
           <div className="space-y-4">
             {channels.map((channel) => {
               const isEmailChannel = channel.type === "email";
+              const isMercadoLibreChannel = channel.type === "mercadolibre";
               const isConfirmingDelete = confirmDeleteId === channel.id;
               const isDeletingThis = deletingId === channel.id;
+
+              if (isMercadoLibreChannel) {
+                const meliCreds = parseMercadoLibreCredentials(
+                  channel.credentials
+                );
+
+                return (
+                  <article
+                    key={channel.id}
+                    className="rounded-2xl border border-amber-300/90 bg-white p-6 shadow-xs"
+                  >
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-slate-900">
+                            {channel.name}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-300">
+                            <ShoppingBag
+                              className="h-3 w-3"
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {
+                                t.dashboard.channels.mercadoLibreSection
+                                  .channelBadge
+                              }
+                            </span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+                            <span>
+                              {
+                                t.dashboard.channels.mercadoLibreSection
+                                  .simulatedBadge
+                              }
+                            </span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                            <CheckCircle2
+                              className="h-3 w-3"
+                              aria-hidden="true"
+                            />
+                            <span>{t.dashboard.channels.connectedBadge}</span>
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                          <span>
+                            <strong>
+                              {
+                                t.dashboard.channels.mercadoLibreSection
+                                  .sellerLabel
+                              }
+                              :
+                            </strong>{" "}
+                            <code className="font-mono text-slate-700">
+                              {meliCreds?.seller_nickname ??
+                                DEFAULT_MELI_SELLER_NICKNAME}
+                            </code>
+                          </span>
+                          <span className="text-slate-400">
+                            {t.dashboard.channels.channelIdLabel}:{" "}
+                            <code className="font-mono text-slate-600">
+                              {channel.id}
+                            </code>
+                          </span>
+                          <span className="text-slate-400">
+                            {t.dashboard.channels.createdLabel}:{" "}
+                            {channel.created_at.slice(0, 10)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href="/dashboard/conversations"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900 ring-1 ring-amber-300 transition-colors hover:bg-amber-200/80"
+                        >
+                          <MessageSquare
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            {
+                              t.dashboard.channels.mercadoLibreSection
+                                .goToConversationsBtn
+                            }
+                          </span>
+                        </Link>
+
+                        {isConfirmingDelete ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            >
+                              {t.common.cancel}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => handleDelete(channel.id)}
+                              className="inline-flex items-center gap-1 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {isDeletingThis && (
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>
+                                {isDeletingThis
+                                  ? t.dashboard.channels.deleting
+                                  : t.dashboard.channels.confirmDelete}
+                              </span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(channel.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{t.dashboard.channels.deleteBtn}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              }
 
               if (isEmailChannel) {
                 const emailCreds = readEmailCredentials(channel.credentials);
@@ -1197,7 +1798,7 @@ export default function ChannelsPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {t.dashboard.channels.upcomingCards.map((card) => {
             const Icon = UPCOMING_ICON_MAP[card.id];
             const colorClasses = UPCOMING_COLOR_MAP[card.id];

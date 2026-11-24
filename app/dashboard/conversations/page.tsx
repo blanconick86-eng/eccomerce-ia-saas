@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/language-context";
+import { parseMercadoLibreThreadMeta } from "@/lib/mercadolibre/simulated";
 import type { SafetyReason } from "@/lib/ai/groq";
 import type { QueryClassification } from "@/lib/validation/ai";
 import type {
@@ -74,6 +75,32 @@ function parseEmailThreadMeta(
   }
 }
 
+function formatChannelDisplayLabel(
+  typeLabel: string,
+  channelName: string
+): string {
+  const trimmedName = channelName.trim();
+  if (trimmedName.toLowerCase().startsWith(typeLabel.toLowerCase())) {
+    return trimmedName;
+  }
+  return `${typeLabel} · ${trimmedName}`;
+}
+
+function getChannelFilterIcon(type: string) {
+  switch (type) {
+    case "email":
+      return Mail;
+    case "mercadolibre":
+      return ShoppingBag;
+    case "amazon":
+      return Package;
+    case "whatsapp":
+      return MessageCircle;
+    default:
+      return Globe;
+  }
+}
+
 const STATUS_STYLE_MAP: Record<string, string> = {
   pending_approval: "bg-amber-50 text-amber-800 ring-amber-200",
   auto_sent: "bg-emerald-50 text-emerald-700 ring-emerald-200",
@@ -114,6 +141,10 @@ export default function ConversationsPage() {
   const [emailSentBanner, setEmailSentBanner] = useState<{
     to: string;
     subject: string;
+  } | null>(null);
+  const [mlSentBanner, setMlSentBanner] = useState<{
+    buyerNickname: string | null;
+    itemTitle: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -240,6 +271,7 @@ export default function ConversationsPage() {
     setModeratingId(messageId);
     setActionError(null);
     setEmailSentBanner(null);
+    setMlSentBanner(null);
 
     try {
       const response = await fetch("/api/conversations", {
@@ -260,6 +292,12 @@ export default function ConversationsPage() {
           to?: string;
           subject?: string;
         };
+        mercadoLibreDelivery?: {
+          sent?: boolean;
+          simulated?: boolean;
+          buyerNickname?: string | null;
+          itemTitle?: string | null;
+        };
         error?: string;
       };
 
@@ -272,6 +310,13 @@ export default function ConversationsPage() {
         setEmailSentBanner({
           to: payload.emailDelivery.to,
           subject: payload.emailDelivery.subject ?? "",
+        });
+      }
+
+      if (payload.mercadoLibreDelivery?.sent) {
+        setMlSentBanner({
+          buyerNickname: payload.mercadoLibreDelivery.buyerNickname ?? null,
+          itemTitle: payload.mercadoLibreDelivery.itemTitle ?? null,
         });
       }
 
@@ -316,14 +361,13 @@ export default function ConversationsPage() {
     }
 
     const typeLabel = getChannelTypeLabel(channel.type);
+    const displayLabel = formatChannelDisplayLabel(typeLabel, channel.name);
 
     if (channel.type === "mercadolibre") {
       return (
-        <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200">
+        <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 ring-1 ring-inset ring-amber-300">
           <ShoppingBag className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {typeLabel} · {channel.name}
-          </span>
+          <span className="truncate">{displayLabel}</span>
         </span>
       );
     }
@@ -332,9 +376,7 @@ export default function ConversationsPage() {
       return (
         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-800 ring-1 ring-inset ring-orange-200">
           <Package className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {typeLabel} · {channel.name}
-          </span>
+          <span className="truncate">{displayLabel}</span>
         </span>
       );
     }
@@ -343,9 +385,7 @@ export default function ConversationsPage() {
       return (
         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">
           <MessageCircle className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {typeLabel} · {channel.name}
-          </span>
+          <span className="truncate">{displayLabel}</span>
         </span>
       );
     }
@@ -354,9 +394,7 @@ export default function ConversationsPage() {
       return (
         <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-800 ring-1 ring-inset ring-teal-200">
           <Mail className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="truncate">
-            {typeLabel} · {channel.name}
-          </span>
+          <span className="truncate">{displayLabel}</span>
         </span>
       );
     }
@@ -364,9 +402,7 @@ export default function ConversationsPage() {
     return (
       <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 ring-1 ring-inset ring-sky-200">
         <Globe className="h-3 w-3 shrink-0" aria-hidden="true" />
-        <span className="truncate">
-          {typeLabel} · {channel.name}
-        </span>
+        <span className="truncate">{displayLabel}</span>
       </span>
     );
   };
@@ -640,7 +676,11 @@ export default function ConversationsPage() {
 
           {channels.map((ch) => {
             const active = channelFilter === ch.id;
-            const FilterIcon = ch.type === "email" ? Mail : Globe;
+            const FilterIcon = getChannelFilterIcon(ch.type);
+            const displayLabel = formatChannelDisplayLabel(
+              getChannelTypeLabel(ch.type),
+              ch.name
+            );
             return (
               <button
                 key={ch.id}
@@ -653,9 +693,7 @@ export default function ConversationsPage() {
                 }`}
               >
                 <FilterIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
-                <span>
-                  {getChannelTypeLabel(ch.type)} · {ch.name}
-                </span>
+                <span>{displayLabel}</span>
               </button>
             );
           })}
@@ -709,6 +747,23 @@ export default function ConversationsPage() {
         </div>
       )}
 
+      {mlSentBanner && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">
+          <CheckCircle2
+            className="h-4 w-4 shrink-0 text-emerald-600"
+            aria-hidden="true"
+          />
+          <span>
+            {t.dashboard.conversations.mlSentSuccess}
+            {mlSentBanner.itemTitle ? ` · ${mlSentBanner.itemTitle}` : ""}
+            {mlSentBanner.buyerNickname
+              ? ` (${mlSentBanner.buyerNickname})`
+              : ""}
+            .
+          </span>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-12 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -733,6 +788,10 @@ export default function ConversationsPage() {
                     firstCustomerMsg?.content ??
                     conv.messages[0]?.content ??
                     conv.id;
+                  const mlListMeta =
+                    conv.channel?.type === "mercadolibre"
+                      ? parseMercadoLibreThreadMeta(conv.external_thread_id)
+                      : null;
                   const isSelected = activeConversation?.id === conv.id;
 
                   return (
@@ -757,6 +816,11 @@ export default function ConversationsPage() {
                           {conv.language}
                         </span>
                       </div>
+                      {mlListMeta?.item_title && (
+                        <p className="mt-2 truncate text-[11px] font-semibold text-amber-800">
+                          {mlListMeta.item_title}
+                        </p>
+                      )}
                       <p className="mt-2 line-clamp-2 text-xs font-medium text-slate-800">
                         {preview}
                       </p>
@@ -810,25 +874,68 @@ export default function ConversationsPage() {
                               activeConversation.external_thread_id
                             )
                           : null;
-                      if (!emailMeta) return null;
-                      return (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-teal-200/80 bg-teal-50/60 px-2.5 py-1 text-xs text-teal-900">
-                          <span>
-                            <strong>
-                              {t.dashboard.conversations.emailFromLabel}:
-                            </strong>{" "}
-                            {emailMeta.fromEmail}
-                          </span>
-                          {emailMeta.subject && (
+                      if (emailMeta) {
+                        return (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-teal-200/80 bg-teal-50/60 px-2.5 py-1 text-xs text-teal-900">
                             <span>
                               <strong>
-                                {t.dashboard.conversations.emailSubjectLabel}:
+                                {t.dashboard.conversations.emailFromLabel}:
                               </strong>{" "}
-                              {emailMeta.subject}
+                              {emailMeta.fromEmail}
                             </span>
-                          )}
-                        </div>
-                      );
+                            {emailMeta.subject && (
+                              <span>
+                                <strong>
+                                  {t.dashboard.conversations.emailSubjectLabel}:
+                                </strong>{" "}
+                                {emailMeta.subject}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      const mlMeta =
+                        activeConversation.channel?.type === "mercadolibre"
+                          ? parseMercadoLibreThreadMeta(
+                              activeConversation.external_thread_id
+                            )
+                          : null;
+                      if (mlMeta) {
+                        return (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-amber-300/90 bg-amber-50/90 px-3 py-1.5 text-xs text-amber-950">
+                            {mlMeta.item_title && (
+                              <span className="inline-flex items-center gap-1.5">
+                                <ShoppingBag
+                                  className="h-3.5 w-3.5 shrink-0 text-amber-700"
+                                  aria-hidden="true"
+                                />
+                                <span>
+                                  {t.dashboard.conversations.mlListingLabel}:
+                                </span>
+                                <strong className="font-semibold">
+                                  {mlMeta.item_title}
+                                </strong>
+                              </span>
+                            )}
+                            {mlMeta.buyer_nickname && (
+                              <span>
+                                {t.dashboard.conversations.mlBuyerLabel}:{" "}
+                                <strong className="font-semibold">
+                                  {mlMeta.buyer_nickname}
+                                </strong>
+                              </span>
+                            )}
+                            {mlMeta.mode === "simulated" && (
+                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-inset ring-amber-300">
+                                {t.dashboard.conversations.mlSimulatedBadge}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      return null;
                     })()}
                   </div>
                   <span

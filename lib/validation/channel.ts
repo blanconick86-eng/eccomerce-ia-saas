@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_FROM_EMAIL } from "@/lib/email/resend";
+import { DEFAULT_MELI_SELLER_NICKNAME } from "@/lib/mercadolibre/simulated";
 
 export const CHANNEL_TYPES = [
   "web_widget",
@@ -9,7 +10,11 @@ export const CHANNEL_TYPES = [
   "whatsapp",
 ] as const;
 
-export const ACTIVE_CHANNEL_TYPES = ["web_widget", "email"] as const;
+export const ACTIVE_CHANNEL_TYPES = [
+  "web_widget",
+  "email",
+  "mercadolibre",
+] as const;
 
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export type ActiveChannelType = (typeof ACTIVE_CHANNEL_TYPES)[number];
@@ -24,6 +29,16 @@ export const emailChannelCredentialsSchema = z.object({
     .transform((val) => val || DEFAULT_FROM_EMAIL),
 });
 
+export const mercadoLibreChannelCredentialsSchema = z.object({
+  mode: z.literal("simulated").default("simulated"),
+  seller_nickname: z
+    .string()
+    .trim()
+    .max(80, "Seller nickname is too long")
+    .optional()
+    .transform((val) => val || DEFAULT_MELI_SELLER_NICKNAME),
+});
+
 export const createChannelSchema = z
   .object({
     name: z
@@ -36,12 +51,27 @@ export const createChannelSchema = z
       .object({
         support_email: z.string().trim().optional(),
         from_email: z.string().trim().optional(),
+        mode: z.string().trim().optional(),
+        seller_nickname: z.string().trim().optional(),
       })
       .optional(),
   })
   .superRefine((val, ctx) => {
     if (val.type === "email") {
       const check = emailChannelCredentialsSchema.safeParse(
+        val.credentials ?? {}
+      );
+      if (!check.success) {
+        for (const issue of check.error.issues) {
+          ctx.addIssue({
+            code: "custom",
+            message: issue.message,
+            path: ["credentials", ...issue.path],
+          });
+        }
+      }
+    } else if (val.type === "mercadolibre") {
+      const check = mercadoLibreChannelCredentialsSchema.safeParse(
         val.credentials ?? {}
       );
       if (!check.success) {
@@ -74,5 +104,27 @@ export const emailWebhookRequestSchema = z.object({
     .trim()
     .min(1, "Email body is required")
     .max(8000, "Email body is too long"),
+  conversationId: z.string().uuid("Invalid conversationId").optional(),
+});
+
+export const mercadoLibreWebhookRequestSchema = z.object({
+  simulated: z.boolean().default(true),
+  storeId: z.string().uuid("Invalid storeId"),
+  channelId: z.string().uuid("Invalid channelId"),
+  buyerNickname: z
+    .string()
+    .trim()
+    .min(1, "Buyer nickname is required")
+    .max(80, "Buyer nickname is too long"),
+  itemTitle: z
+    .string()
+    .trim()
+    .min(1, "Item title is required")
+    .max(300, "Item title is too long"),
+  questionText: z
+    .string()
+    .trim()
+    .min(1, "Question text is required")
+    .max(8000, "Question text is too long"),
   conversationId: z.string().uuid("Invalid conversationId").optional(),
 });

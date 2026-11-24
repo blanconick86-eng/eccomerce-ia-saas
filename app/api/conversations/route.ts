@@ -6,6 +6,10 @@ import {
   parseEmailThreadMeta,
   sendStoreEmailReply,
 } from "@/lib/email/resend";
+import {
+  isSimulatedMercadoLibreChannel,
+  parseMercadoLibreThreadMeta,
+} from "@/lib/mercadolibre/simulated";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import { messageModerationSchema } from "@/lib/validation/ai";
 import type { ChannelSummary, Conversation, Message } from "@/types/database";
@@ -216,6 +220,14 @@ export async function PATCH(request: NextRequest) {
   let emailDelivery:
     | { sent: true; to: string; subject: string; id: string | null }
     | undefined;
+  let mercadoLibreDelivery:
+    | {
+        sent: true;
+        simulated: true;
+        buyerNickname: string | null;
+        itemTitle: string | null;
+      }
+    | undefined;
 
   if (
     (action === "approve" || action === "edit_and_approve") &&
@@ -258,6 +270,30 @@ export async function PATCH(request: NextRequest) {
       subject: formatReplySubject(threadMeta.subject),
       id: sendResult.id,
     };
+  } else if (
+    (action === "approve" || action === "edit_and_approve") &&
+    convChannel?.type === "mercadolibre"
+  ) {
+    if (!isSimulatedMercadoLibreChannel(convChannel.credentials)) {
+      return NextResponse.json(
+        {
+          error:
+            "Mercado Libre live OAuth delivery is not configured yet. Use simulated mode.",
+        },
+        { status: 501 }
+      );
+    }
+
+    const mlMeta = parseMercadoLibreThreadMeta(
+      (ownerConv as { external_thread_id?: string | null }).external_thread_id
+    );
+
+    mercadoLibreDelivery = {
+      sent: true,
+      simulated: true,
+      buyerNickname: mlMeta?.buyer_nickname || null,
+      itemTitle: mlMeta?.item_title || null,
+    };
   }
 
   const updateFields =
@@ -297,5 +333,6 @@ export async function PATCH(request: NextRequest) {
     message: updatedMessage,
     conversationStatus: nextConversationStatus,
     ...(emailDelivery ? { emailDelivery } : {}),
+    ...(mercadoLibreDelivery ? { mercadoLibreDelivery } : {}),
   });
 }

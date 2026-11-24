@@ -571,6 +571,11 @@ export const translations = {
         emailFromLabel: "De",
         emailSubjectLabel: "Asunto",
         emailSentSuccess: "Correo enviado con Resend a",
+        mlListingLabel: "Publicación",
+        mlBuyerLabel: "Comprador",
+        mlSimulatedBadge: "Modo simulado",
+        mlSentSuccess:
+          "Respuesta aprobada y marcada como enviada en Mercado Libre (Modo simulado)",
         statusLabels: {
           pending_approval: "Pendiente de aprobación",
           auto_sent: "Enviada automáticamente",
@@ -605,7 +610,7 @@ export const translations = {
         namePlaceholder: "Ej: Tienda Principal, Mi Tiendanube, Mayorista...",
         createBtn: "Crear canal web",
         creating: "Creando...",
-        connectedTitle: "Canales Web activos",
+        connectedTitle: "Canales activos",
         connectedSubtitle:
           "Cada canal incluye su propio data-channel-id para etiquetar las conversaciones en la bandeja unificada.",
         connectedBadge: "Conectado",
@@ -629,12 +634,6 @@ export const translations = {
           "Canales nativos en desarrollo para centralizar preguntas y mensajería de marketplaces y mensajería instantánea.",
         comingSoonBadge: "Próximamente",
         upcomingCards: [
-          {
-            id: "mercadolibre",
-            title: "Mercado Libre",
-            description:
-              "Respondé preguntas de publicaciones y mensajes post-venta usando tu catálogo y políticas reales.",
-          },
           {
             id: "amazon",
             title: "Amazon",
@@ -690,6 +689,38 @@ export const translations = {
             "Se generó la respuesta (auto_sent), pero Resend devolvió:",
           goToConversationsBtn: "Abrir Bandeja Unificada",
           testError: "No pudimos simular el correo entrante.",
+        },
+        mercadoLibreSection: {
+          title: "Mercado Libre",
+          subtitle:
+            "Simulá preguntas de publicaciones conectadas a Groq, tu catálogo y las reglas de seguridad sin requerir MELI_APP_ID ni OAuth todavía.",
+          simulatedBadge: "Modo simulado",
+          channelBadge: "Mercado Libre",
+          nameLabel: "Nombre del canal",
+          namePlaceholder: "Mercado Libre · Tienda",
+          sellerNicknameLabel: "Usuario vendedor (seller_nickname)",
+          sellerNicknamePlaceholder: "MI_TIENDA_ML",
+          activateBtn: "Activar Mercado Libre (Simulado)",
+          activating: "Activando...",
+          activeHelper:
+            "Canal activo en modo simulado: las respuestas aprobadas o automáticas se registran en Supabase sin llamar a api.mercadolibre.com.",
+          sellerLabel: "Vendedor",
+          simFormTitle: "Simular pregunta de Mercado Libre",
+          simBuyerLabel: "Usuario comprador",
+          simBuyerPlaceholder: "COMPRADOR_AR",
+          simItemTitleLabel: "Título de la publicación",
+          simItemTitlePlaceholder: "Zapatillas Running Pro Talle 42",
+          simQuestionLabel: "Pregunta del comprador",
+          simQuestionPlaceholder:
+            "Hola! Tenés stock en talle 42? Hacen envíos a Córdoba?",
+          simSubmitBtn: "Enviar pregunta simulada",
+          simSubmitting: "Procesando pregunta con Groq...",
+          simSuccessAutoSent:
+            "Respuesta generada y enviada automáticamente en modo simulado (sin llamar a la API de Mercado Libre).",
+          simSuccessPending:
+            "La pregunta quedó en pending_approval en la Bandeja Unificada para revisión manual.",
+          goToConversationsBtn: "Abrir Bandeja Unificada",
+          simError: "No pudimos enviar la pregunta simulada.",
         },
       },
       knowledge: {
@@ -1446,6 +1477,11 @@ export const translations = {
         emailFromLabel: "From",
         emailSubjectLabel: "Subject",
         emailSentSuccess: "Email sent via Resend to",
+        mlListingLabel: "Listing",
+        mlBuyerLabel: "Buyer",
+        mlSimulatedBadge: "Simulated mode",
+        mlSentSuccess:
+          "Reply approved and marked as sent on Mercado Libre (Simulated mode)",
         statusLabels: {
           pending_approval: "Pending approval",
           auto_sent: "Auto-sent",
@@ -1480,7 +1516,7 @@ export const translations = {
         namePlaceholder: "e.g., Main Store, Shopify ES, Wholesale...",
         createBtn: "Create web channel",
         creating: "Creating...",
-        connectedTitle: "Active Web channels",
+        connectedTitle: "Active channels",
         connectedSubtitle:
           "Each channel embeds its own data-channel-id so incoming conversations are tagged automatically.",
         connectedBadge: "Connected",
@@ -1504,12 +1540,6 @@ export const translations = {
           "Native connectors on the roadmap to unify marketplace Q&A and instant messaging.",
         comingSoonBadge: "Coming soon",
         upcomingCards: [
-          {
-            id: "mercadolibre",
-            title: "Mercado Libre",
-            description:
-              "Reply to listing questions and post-purchase messages grounded in your real catalog and policies.",
-          },
           {
             id: "amazon",
             title: "Amazon",
@@ -1565,6 +1595,38 @@ export const translations = {
             "Reply generated (auto_sent), but Resend returned:",
           goToConversationsBtn: "Open Unified Inbox",
           testError: "Could not simulate the inbound email.",
+        },
+        mercadoLibreSection: {
+          title: "Mercado Libre",
+          subtitle:
+            "Simulate listing questions connected to Groq, your catalog, and safety rules without requiring MELI_APP_ID or OAuth yet.",
+          simulatedBadge: "Simulated mode",
+          channelBadge: "Mercado Libre",
+          nameLabel: "Channel name",
+          namePlaceholder: "Mercado Libre · Tienda",
+          sellerNicknameLabel: "Seller nickname (seller_nickname)",
+          sellerNicknamePlaceholder: "MI_TIENDA_ML",
+          activateBtn: "Activate Mercado Libre (Simulated)",
+          activating: "Activating...",
+          activeHelper:
+            "Channel active in simulated mode: auto-sent and approved replies are stored in Supabase without calling api.mercadolibre.com.",
+          sellerLabel: "Seller",
+          simFormTitle: "Simulate a Mercado Libre question",
+          simBuyerLabel: "Buyer username",
+          simBuyerPlaceholder: "COMPRADOR_AR",
+          simItemTitleLabel: "Listing title",
+          simItemTitlePlaceholder: "Zapatillas Running Pro Talle 42",
+          simQuestionLabel: "Buyer question",
+          simQuestionPlaceholder:
+            "Hi! Do you have size 42 in stock? Do you ship to Córdoba?",
+          simSubmitBtn: "Send simulated question",
+          simSubmitting: "Processing question with Groq...",
+          simSuccessAutoSent:
+            "Reply generated and marked as auto-sent in simulated mode (without calling the Mercado Libre API).",
+          simSuccessPending:
+            "The question entered pending_approval in the Unified Inbox for manual review.",
+          goToConversationsBtn: "Open Unified Inbox",
+          simError: "Could not send the simulated question.",
         },
       },
       knowledge: {

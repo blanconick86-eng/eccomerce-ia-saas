@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { DEFAULT_FROM_EMAIL } from "@/lib/email/resend";
+import { DEFAULT_MELI_SELLER_NICKNAME } from "@/lib/mercadolibre/simulated";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import {
   createChannelSchema,
@@ -62,7 +63,14 @@ export async function POST(request: NextRequest) {
           from_email:
             parsed.data.credentials?.from_email?.trim() || DEFAULT_FROM_EMAIL,
         }
-      : undefined;
+      : parsed.data.type === "mercadolibre"
+        ? {
+            mode: "simulated" as const,
+            seller_nickname:
+              parsed.data.credentials?.seller_nickname?.trim() ||
+              DEFAULT_MELI_SELLER_NICKNAME,
+          }
+        : undefined;
 
   const { data, error } = await supabase
     .from("channels")
