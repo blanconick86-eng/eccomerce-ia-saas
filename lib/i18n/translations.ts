@@ -666,6 +666,24 @@ export const translations = {
             "El envío saliente usa el remitente verificado en Brevo (BREVO_SENDER_EMAIL y BREVO_SENDER_NAME).",
           connectBtn: "Conectar correo electrónico",
           connecting: "Conectando...",
+          forwardingTitle: "Dirección de reenvío única de tu tienda",
+          forwardingHelper:
+            "Reenviá los correos de tu casilla de soporte a esta dirección y se responderán con IA usando tu catálogo.",
+          copyAddressBtn: "Copiar dirección",
+          copiedAddressBtn: "¡Dirección copiada!",
+          guideToggleLabel: "¿Cómo conectar tu Gmail en 3 pasos?",
+          guideStep1:
+            "Andá a tu Gmail → Configuración → Reenvío y correo POP/IMAP → Agregar una dirección de reenvío → Pegá esta dirección.",
+          guideStep2:
+            "Confirmá el código de verificación si Gmail lo solicita (llegará directo a tu bandeja de conversaciones).",
+          guideStep3:
+            "Activá «Reenviar una copia del correo entrante a» y guardá los cambios. También las respuestas a tus clientes usarán esta dirección en Reply-To.",
+          tabSetup: "Configuración",
+          tabTest: "Probar envío",
+          testSimulatorHint:
+            "Simulá un correo entrante como si llegara desde Brevo Inbound para probar el flujo con Groq y tu catálogo.",
+          connectFirstNotice:
+            "Primero conectá el canal de email en la pestaña Configuración para habilitar el simulador.",
           webhookTitle: "URL de Webhook de entrada",
           copyWebhookBtn: "Copiar URL",
           copiedWebhookBtn: "¡URL copiada!",
@@ -1572,6 +1590,24 @@ export const translations = {
             "Outbound replies use your verified Brevo sender configured on the server (BREVO_SENDER_EMAIL and BREVO_SENDER_NAME).",
           connectBtn: "Connect email channel",
           connecting: "Connecting...",
+          forwardingTitle: "Your store's unique forwarding address",
+          forwardingHelper:
+            "Forward emails from your support inbox to this address to handle customer replies with AI grounded in your catalog.",
+          copyAddressBtn: "Copy address",
+          copiedAddressBtn: "Address copied!",
+          guideToggleLabel: "How to connect Gmail in 3 steps",
+          guideStep1:
+            "Go to Gmail → Settings → Forwarding and POP/IMAP → Add a forwarding address → Paste this address.",
+          guideStep2:
+            "Confirm the verification code if Gmail requests one (it will arrive in your StoreOne conversations inbox).",
+          guideStep3:
+            "Enable \"Forward a copy of incoming mail to\" and save changes. Outbound replies also include this address in Reply-To.",
+          tabSetup: "Setup",
+          tabTest: "Test email",
+          testSimulatorHint:
+            "Simulate an inbound customer email as if received via Brevo Inbound to test Groq and your catalog.",
+          connectFirstNotice:
+            "Connect your email channel in the Setup tab first to use the simulator.",
           webhookTitle: "Inbound Webhook URL",
           copyWebhookBtn: "Copy URL",
           copiedWebhookBtn: "URL copied!",

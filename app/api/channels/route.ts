@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DEFAULT_FROM_EMAIL } from "@/lib/email/brevo";
+import {
+  buildStoreInboundEmail,
+  buildStoreInboundSlug,
+  DEFAULT_FROM_EMAIL,
+} from "@/lib/email/brevo";
 import { DEFAULT_MELI_SELLER_NICKNAME } from "@/lib/mercadolibre/simulated";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import {
@@ -29,6 +33,8 @@ export async function GET() {
       id: store.id,
       name: store.name,
       language: store.language,
+      inbound_slug: buildStoreInboundSlug(store),
+      inbound_email: buildStoreInboundEmail(store),
     },
     channels: data ?? [],
   });
@@ -62,6 +68,8 @@ export async function POST(request: NextRequest) {
           support_email: parsed.data.credentials!.support_email!.trim(),
           from_email:
             parsed.data.credentials?.from_email?.trim() || DEFAULT_FROM_EMAIL,
+          inbound_slug: buildStoreInboundSlug(store),
+          inbound_email: buildStoreInboundEmail(store),
         }
       : parsed.data.type === "mercadolibre"
         ? {

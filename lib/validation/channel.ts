@@ -27,6 +27,8 @@ export const emailChannelCredentialsSchema = z.object({
     .max(160, "Sender email is too long")
     .optional()
     .transform((val) => val || DEFAULT_FROM_EMAIL),
+  inbound_slug: z.string().trim().max(80).optional(),
+  inbound_email: z.string().trim().max(160).optional(),
 });
 
 export const mercadoLibreChannelCredentialsSchema = z.object({
@@ -51,6 +53,8 @@ export const createChannelSchema = z
       .object({
         support_email: z.string().trim().optional(),
         from_email: z.string().trim().optional(),
+        inbound_slug: z.string().trim().optional(),
+        inbound_email: z.string().trim().optional(),
         mode: z.string().trim().optional(),
         seller_nickname: z.string().trim().optional(),
       })
@@ -106,6 +110,39 @@ export const emailWebhookRequestSchema = z.object({
     .max(8000, "Email body is too long"),
   conversationId: z.string().uuid("Invalid conversationId").optional(),
 });
+
+export const brevoInboundAddressSchema = z
+  .object({
+    Name: z.string().nullable().optional(),
+    Address: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export const brevoInboundItemSchema = z
+  .object({
+    From: brevoInboundAddressSchema.nullable().optional(),
+    To: z.array(brevoInboundAddressSchema).optional(),
+    Cc: z.array(brevoInboundAddressSchema).optional(),
+    ReplyTo: brevoInboundAddressSchema.nullable().optional(),
+    Subject: z.string().nullable().optional(),
+    RawTextBody: z.string().nullable().optional(),
+    RawHtmlBody: z.string().nullable().optional(),
+    ExtractedMarkdownMessage: z.string().nullable().optional(),
+    InReplyTo: z.string().nullable().optional(),
+    MessageId: z.string().nullable().optional(),
+    Headers: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
+export const brevoInboundWebhookSchema = z
+  .object({
+    items: z
+      .array(brevoInboundItemSchema)
+      .min(1, "Brevo items array is empty"),
+  })
+  .passthrough();
+
+export type BrevoInboundItem = z.infer<typeof brevoInboundItemSchema>;
 
 export const mercadoLibreWebhookRequestSchema = z.object({
   simulated: z.boolean().default(true),

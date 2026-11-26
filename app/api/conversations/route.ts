@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  buildStoreInboundEmail,
   formatReplySubject,
   parseEmailThreadMeta,
   sendStoreEmailReply,
@@ -246,10 +247,13 @@ export async function PATCH(request: NextRequest) {
         ? content
         : targetMessage.content;
 
+    const replyToEmail = buildStoreInboundEmail(store, convChannel.credentials);
+
     const sendResult = await sendStoreEmailReply({
       to: threadMeta.fromEmail,
       subject: threadMeta.subject,
       bodyText: finalContent,
+      replyTo: replyToEmail,
     });
 
     if (!sendResult.ok) {
