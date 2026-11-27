@@ -22,7 +22,21 @@ export type Product = {
   currency: string;
   stock_status: string;
   category: string | null;
+  source?: string | null;
+  external_id?: string | null;
+  stock_quantity?: number | null;
+  image_url?: string | null;
   created_at: string;
+  updated_at: string;
+};
+
+export type ShopifyIntegrationSummary = {
+  id: string;
+  store_id: string;
+  shop_domain: string;
+  scopes: string;
+  status: string;
+  last_synced_at: string | null;
   updated_at: string;
 };
 

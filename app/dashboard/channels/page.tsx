@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -24,8 +25,10 @@ import {
   MessageSquare,
   Package,
   Plus,
+  RefreshCw,
   Send,
   ShoppingBag,
+  Store,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,7 +39,8 @@ import {
   DEFAULT_MELI_SELLER_NICKNAME,
   parseMercadoLibreCredentials,
 } from "@/lib/mercadolibre/simulated";
-import type { Channel } from "@/types/database";
+import { normalizeShopDomain } from "@/lib/shopify/shared";
+import type { Channel, ShopifyIntegrationSummary } from "@/types/database";
 
 const DEFAULT_FROM_EMAIL = "StoreOne Soporte";
 
@@ -194,6 +198,24 @@ export default function ChannelsPage() {
   const [testResult, setTestResult] = useState<EmailTestResponse | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
+  // Shopify OAuth & sync state
+  const [shopifyIntegration, setShopifyIntegration] =
+    useState<ShopifyIntegrationSummary | null>(null);
+  const [isLoadingShopify, setIsLoadingShopify] = useState(true);
+  const [shopifyMigrationRequired, setShopifyMigrationRequired] =
+    useState(false);
+  const [shopifyDomainInput, setShopifyDomainInput] = useState("");
+  const [isRedirectingShopify, setIsRedirectingShopify] = useState(false);
+  const [isSyncingShopify, setIsSyncingShopify] = useState(false);
+  const [shopifyNotice, setShopifyNotice] = useState<string | null>(null);
+  const [shopifyError, setShopifyError] = useState<string | null>(null);
+  const [
+    isConfirmingShopifyDisconnect,
+    setIsConfirmingShopifyDisconnect,
+  ] = useState(false);
+  const [isDisconnectingShopify, setIsDisconnectingShopify] = useState(false);
+
+  const hasHandledShopifyRedirectRef = useRef(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const origin = useSyncExternalStore(
@@ -291,6 +313,196 @@ export default function ChannelsPage() {
       cancelled = true;
     };
   }, [t.dashboard.channels.loadError]);
+
+  const handleSyncShopify = useCallback(async () => {
+    setIsSyncingShopify(true);
+    setShopifyError(null);
+
+    try {
+      const response = await fetch("/api/integrations/shopify/sync", {
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        syncedCount?: number;
+        lastSyncedAt?: string;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        setShopifyError(
+          payload.error || t.dashboard.channels.shopifySection.syncError
+        );
+        return;
+      }
+
+      const count = payload.syncedCount ?? 0;
+      setShopifyNotice(
+        `${t.dashboard.channels.shopifySection.syncSuccessPrefix} ${count} ${t.dashboard.channels.shopifySection.syncSuccessSuffix}`
+      );
+      if (payload.lastSyncedAt) {
+        setShopifyIntegration((prev) =>
+          prev
+            ? {
+                ...prev,
+                last_synced_at: payload.lastSyncedAt!,
+                updated_at: payload.lastSyncedAt!,
+              }
+            : prev
+        );
+      }
+    } catch {
+      setShopifyError(t.dashboard.channels.shopifySection.syncError);
+    } finally {
+      setIsSyncingShopify(false);
+    }
+  }, [
+    t.dashboard.channels.shopifySection.syncError,
+    t.dashboard.channels.shopifySection.syncSuccessPrefix,
+    t.dashboard.channels.shopifySection.syncSuccessSuffix,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    let redirectOutcome: {
+      shopifyParam: string | null;
+      reasonParam: string | null;
+    } | null = null;
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const shopifyParam = searchParams.get("shopify");
+    const reasonParam = searchParams.get("reason");
+    const shouldProcessRedirect =
+      !hasHandledShopifyRedirectRef.current &&
+      (shopifyParam === "connected" || shopifyParam === "error");
+
+    if (shouldProcessRedirect) {
+      hasHandledShopifyRedirectRef.current = true;
+      redirectOutcome = { shopifyParam, reasonParam };
+      window.history.replaceState({}, "", "/dashboard/channels");
+    }
+
+    fetch("/api/integrations/shopify/status")
+      .then(async (res) => {
+        const payload = (await res.json()) as {
+          connected?: boolean;
+          integration?: ShopifyIntegrationSummary | null;
+          migrationRequired?: boolean;
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(
+            payload.error || t.dashboard.channels.shopifySection.statusLoadError
+          );
+        }
+        return payload;
+      })
+      .then((payload) => {
+        if (cancelled) return;
+        setShopifyMigrationRequired(Boolean(payload.migrationRequired));
+        setShopifyIntegration(
+          payload.connected && payload.integration ? payload.integration : null
+        );
+
+        if (redirectOutcome?.shopifyParam === "error") {
+          const reasonMap = t.dashboard.channels.shopifySection
+            .errorReasons as Record<string, string>;
+          setShopifyError(
+            (redirectOutcome.reasonParam &&
+              reasonMap[redirectOutcome.reasonParam]) ||
+              reasonMap.unknown
+          );
+        } else if (redirectOutcome?.shopifyParam === "connected") {
+          setShopifyNotice(t.dashboard.channels.shopifySection.connectedNotice);
+          if (payload.connected && payload.integration) {
+            void handleSyncShopify();
+          }
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          if (redirectOutcome?.shopifyParam === "error") {
+            const reasonMap = t.dashboard.channels.shopifySection
+              .errorReasons as Record<string, string>;
+            setShopifyError(
+              (redirectOutcome.reasonParam &&
+                reasonMap[redirectOutcome.reasonParam]) ||
+                reasonMap.unknown
+            );
+            return;
+          }
+          setShopifyError(
+            err instanceof Error
+              ? err.message
+              : t.dashboard.channels.shopifySection.statusLoadError
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingShopify(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    handleSyncShopify,
+    t.dashboard.channels.shopifySection.connectedNotice,
+    t.dashboard.channels.shopifySection.errorReasons,
+    t.dashboard.channels.shopifySection.statusLoadError,
+  ]);
+
+  const handleConnectShopify = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isRedirectingShopify) return;
+
+    const normalized = normalizeShopDomain(shopifyDomainInput);
+    if (!normalized) {
+      setShopifyError(t.dashboard.channels.shopifySection.invalidDomainError);
+      return;
+    }
+
+    setShopifyError(null);
+    setShopifyNotice(null);
+    setIsRedirectingShopify(true);
+    window.location.assign(
+      `${window.location.origin}/api/integrations/shopify/auth?shop=${encodeURIComponent(normalized)}`
+    );
+  };
+
+  const handleDisconnectShopify = async () => {
+    if (isDisconnectingShopify) return;
+    setIsDisconnectingShopify(true);
+    setShopifyError(null);
+
+    try {
+      const response = await fetch("/api/integrations/shopify/disconnect", {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+      };
+
+      if (!response.ok || !payload.ok) {
+        setShopifyError(
+          payload.error || t.dashboard.channels.shopifySection.disconnectError
+        );
+        return;
+      }
+
+      setShopifyIntegration(null);
+      setIsConfirmingShopifyDisconnect(false);
+      setShopifyNotice(t.dashboard.channels.shopifySection.disconnectedNotice);
+    } catch {
+      setShopifyError(t.dashboard.channels.shopifySection.disconnectError);
+    } finally {
+      setIsDisconnectingShopify(false);
+    }
+  };
 
   const markCopied = (key: string) => {
     setCopiedKey(key);
@@ -1081,6 +1293,235 @@ export default function ChannelsPage() {
           )}
         </section>
       </div>
+
+      {/* Shopify OAuth & Catalog Sync Card */}
+      <section className="rounded-2xl border border-emerald-300/90 bg-white p-6 shadow-xs">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200">
+              <Store className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                {t.dashboard.channels.shopifySection.title}
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-600">
+                {t.dashboard.channels.shopifySection.subtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
+              <span>{t.dashboard.channels.shopifySection.oauthBadge}</span>
+            </span>
+            {shopifyIntegration && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                <span>{t.dashboard.channels.shopifySection.connectedBadge}</span>
+              </span>
+            )}
+          </div>
+        </div>
+
+        {shopifyMigrationRequired && (
+          <div
+            role="alert"
+            className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-900"
+          >
+            <AlertCircle
+              className="h-4 w-4 shrink-0 text-amber-700"
+              aria-hidden="true"
+            />
+            <span>{t.dashboard.channels.shopifySection.migrationWarning}</span>
+          </div>
+        )}
+
+        {shopifyError && (
+          <div
+            role="alert"
+            className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-800"
+          >
+            <AlertCircle
+              className="h-4 w-4 shrink-0 text-rose-600"
+              aria-hidden="true"
+            />
+            <span>{shopifyError}</span>
+          </div>
+        )}
+
+        {shopifyNotice && (
+          <div
+            role="status"
+            className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800"
+          >
+            <span className="flex items-center gap-2">
+              <CheckCircle2
+                className="h-4 w-4 shrink-0 text-emerald-600"
+                aria-hidden="true"
+              />
+              <span>{shopifyNotice}</span>
+            </span>
+            <Link
+              href="/dashboard/products"
+              className="font-semibold text-emerald-900 underline-offset-2 hover:underline"
+            >
+              {t.dashboard.channels.shopifySection.viewCatalogBtn} →
+            </Link>
+          </div>
+        )}
+
+        {isLoadingShopify ? (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span>{t.dashboard.channels.loading}</span>
+          </div>
+        ) : !shopifyIntegration ? (
+          <form onSubmit={handleConnectShopify} className="mt-5 space-y-4">
+            <div>
+              <label
+                htmlFor="shopify-domain"
+                className="block text-xs font-medium text-slate-700"
+              >
+                {t.dashboard.channels.shopifySection.domainLabel}
+              </label>
+              <div className="mt-1.5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                  id="shopify-domain"
+                  type="text"
+                  required
+                  disabled={isRedirectingShopify}
+                  value={shopifyDomainInput}
+                  onChange={(e) => {
+                    setShopifyDomainInput(e.target.value);
+                    if (shopifyError) setShopifyError(null);
+                  }}
+                  placeholder={
+                    t.dashboard.channels.shopifySection.domainPlaceholder
+                  }
+                  className="w-full flex-1 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-50"
+                />
+                <button
+                  type="submit"
+                  disabled={isRedirectingShopify || !shopifyDomainInput.trim()}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isRedirectingShopify ? (
+                    <Loader2
+                      className="h-4 w-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Store className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span>
+                    {isRedirectingShopify
+                      ? t.dashboard.channels.shopifySection.connecting
+                      : t.dashboard.channels.shopifySection.connectBtn}
+                  </span>
+                </button>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                {t.dashboard.channels.shopifySection.domainHelper}
+              </p>
+            </div>
+          </form>
+        ) : (
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-950">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span>
+                  <strong>
+                    {t.dashboard.channels.shopifySection.shopLabel}:
+                  </strong>{" "}
+                  <code className="font-mono font-semibold text-emerald-900">
+                    {shopifyIntegration.shop_domain}
+                  </code>
+                </span>
+                <span className="text-emerald-800/80">
+                  <strong>
+                    {t.dashboard.channels.shopifySection.lastSyncedLabel}:
+                  </strong>{" "}
+                  {shopifyIntegration.last_synced_at
+                    ? shopifyIntegration.last_synced_at.slice(0, 16).replace("T", " ")
+                    : t.dashboard.channels.shopifySection.neverSyncedLabel}
+                </span>
+              </div>
+
+              <Link
+                href="/dashboard/products"
+                className="font-semibold text-emerald-900 underline-offset-2 hover:underline"
+              >
+                {t.dashboard.channels.shopifySection.viewCatalogBtn} →
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={isSyncingShopify || isDisconnectingShopify}
+                onClick={handleSyncShopify}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSyncingShopify ? (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                )}
+                <span>
+                  {isSyncingShopify
+                    ? t.dashboard.channels.shopifySection.syncing
+                    : t.dashboard.channels.shopifySection.syncBtn}
+                </span>
+              </button>
+
+              {isConfirmingShopifyDisconnect ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isDisconnectingShopify}
+                    onClick={() => setIsConfirmingShopifyDisconnect(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    {t.common.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDisconnectingShopify}
+                    onClick={handleDisconnectShopify}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    {isDisconnectingShopify && (
+                      <Loader2
+                        className="h-3.5 w-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span>
+                      {isDisconnectingShopify
+                        ? t.dashboard.channels.shopifySection.disconnecting
+                        : t.dashboard.channels.shopifySection.confirmDisconnect}
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSyncingShopify}
+                  onClick={() => setIsConfirmingShopifyDisconnect(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50 disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t.dashboard.channels.shopifySection.disconnectBtn}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Mercado Libre (Simulated Mode) Card */}
       <section className="rounded-2xl border border-amber-300/90 bg-white p-6 shadow-xs">

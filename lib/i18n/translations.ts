@@ -740,6 +740,57 @@ export const translations = {
           goToConversationsBtn: "Abrir Bandeja Unificada",
           simError: "No pudimos enviar la pregunta simulada.",
         },
+        shopifySection: {
+          title: "Shopify",
+          subtitle:
+            "Conectá tu tienda Shopify vía OAuth 2.0 para importar y mantener sincronizado tu catálogo real en StoreOne.",
+          oauthBadge: "OAuth 2.0",
+          connectedBadge: "Conectado",
+          domainLabel: "Dominio de tu tienda Shopify",
+          domainPlaceholder: "mi-tienda.myshopify.com",
+          domainHelper:
+            "Ingresá el subdominio .myshopify.com de tu tienda (sin https:// ni rutas).",
+          invalidDomainError:
+            "Ingresá un dominio válido con formato mi-tienda.myshopify.com.",
+          connectBtn: "Conectar Shopify",
+          connecting: "Redirigiendo a Shopify...",
+          shopLabel: "Tienda conectada",
+          lastSyncedLabel: "Última sincronización",
+          neverSyncedLabel: "Aún sin sincronizar",
+          syncBtn: "Sincronizar productos",
+          syncing: "Sincronizando productos...",
+          disconnectBtn: "Desconectar",
+          confirmDisconnect: "Confirmar",
+          disconnecting: "Desconectando...",
+          viewCatalogBtn: "Ver catálogo de productos",
+          connectedNotice:
+            "¡Tienda Shopify conectada correctamente! Iniciando primera sincronización de productos...",
+          syncSuccessPrefix: "Sincronización completada:",
+          syncSuccessSuffix: "productos importados/actualizados en StoreOne.",
+          disconnectedNotice: "La integración con Shopify fue desconectada.",
+          syncError: "No pudimos sincronizar los productos desde Shopify.",
+          disconnectError: "No pudimos desconectar la tienda de Shopify.",
+          statusLoadError: "No pudimos verificar el estado de Shopify.",
+          migrationWarning:
+            "Falta ejecutar la migración SQL de Shopify en Supabase para guardar la conexión.",
+          errorReasons: {
+            missing_config:
+              "Faltan las credenciales SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET en el servidor.",
+            missing_params:
+              "Shopify no devolvió todos los parámetros requeridos para completar OAuth.",
+            invalid_state:
+              "La sesión de autorización expiró o no pasó la validación CSRF (state). Intentá de nuevo.",
+            invalid_hmac:
+              "No pudimos validar la firma criptográfica HMAC de Shopify.",
+            unauthorized:
+              "Tu sesión de StoreOne expiró o no coincide con la tienda que inició la conexión.",
+            token_exchange_failed:
+              "No pudimos intercambiar el código de autorización por el token de Shopify.",
+            db_error:
+              "No pudimos guardar las credenciales de Shopify en Supabase.",
+            unknown: "Ocurrió un error al conectar con Shopify.",
+          },
+        },
       },
       knowledge: {
         title: "Base de conocimiento",
@@ -1663,6 +1714,57 @@ export const translations = {
             "The question entered pending_approval in the Unified Inbox for manual review.",
           goToConversationsBtn: "Open Unified Inbox",
           simError: "Could not send the simulated question.",
+        },
+        shopifySection: {
+          title: "Shopify",
+          subtitle:
+            "Connect your Shopify store via OAuth 2.0 to import and keep your real product catalog synced in StoreOne.",
+          oauthBadge: "OAuth 2.0",
+          connectedBadge: "Connected",
+          domainLabel: "Your Shopify store domain",
+          domainPlaceholder: "my-store.myshopify.com",
+          domainHelper:
+            "Enter your store's .myshopify.com domain (without https:// or paths).",
+          invalidDomainError:
+            "Enter a valid domain formatted as my-store.myshopify.com.",
+          connectBtn: "Connect Shopify",
+          connecting: "Redirecting to Shopify...",
+          shopLabel: "Connected store",
+          lastSyncedLabel: "Last synced",
+          neverSyncedLabel: "Not synced yet",
+          syncBtn: "Sync products",
+          syncing: "Syncing products...",
+          disconnectBtn: "Disconnect",
+          confirmDisconnect: "Confirm",
+          disconnecting: "Disconnecting...",
+          viewCatalogBtn: "View product catalog",
+          connectedNotice:
+            "Shopify store connected! Running your first product sync...",
+          syncSuccessPrefix: "Sync completed:",
+          syncSuccessSuffix: "products imported/updated in StoreOne.",
+          disconnectedNotice: "Shopify integration was disconnected.",
+          syncError: "Could not sync products from Shopify.",
+          disconnectError: "Could not disconnect the Shopify store.",
+          statusLoadError: "Could not check Shopify connection status.",
+          migrationWarning:
+            "The Shopify SQL migration must be run in Supabase before connecting.",
+          errorReasons: {
+            missing_config:
+              "Server is missing SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET environment variables.",
+            missing_params:
+              "Shopify did not return all required OAuth callback parameters.",
+            invalid_state:
+              "Authorization state expired or failed CSRF verification. Please try again.",
+            invalid_hmac:
+              "Failed to verify Shopify HMAC signature.",
+            unauthorized:
+              "Your StoreOne session expired or does not match the store that started OAuth.",
+            token_exchange_failed:
+              "Could not exchange the authorization code for a Shopify access token.",
+            db_error:
+              "Could not save Shopify credentials in Supabase.",
+            unknown: "An error occurred while connecting Shopify.",
+          },
         },
       },
       knowledge: {
