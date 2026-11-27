@@ -20,6 +20,10 @@ import {
 } from "lucide-react";
 import { useLanguage } from "@/lib/i18n/language-context";
 import { parseMercadoLibreThreadMeta } from "@/lib/mercadolibre/simulated";
+import {
+  formatWhatsAppPhoneDisplay,
+  parseWhatsAppThreadMeta,
+} from "@/lib/meta/shared";
 import type { SafetyReason } from "@/lib/ai/groq";
 import type { QueryClassification } from "@/lib/validation/ai";
 import type {
@@ -145,6 +149,9 @@ export default function ConversationsPage() {
   const [mlSentBanner, setMlSentBanner] = useState<{
     buyerNickname: string | null;
     itemTitle: string | null;
+  } | null>(null);
+  const [waSentBanner, setWaSentBanner] = useState<{
+    to: string;
   } | null>(null);
 
   useEffect(() => {
@@ -272,6 +279,7 @@ export default function ConversationsPage() {
     setActionError(null);
     setEmailSentBanner(null);
     setMlSentBanner(null);
+    setWaSentBanner(null);
 
     try {
       const response = await fetch("/api/conversations", {
@@ -298,6 +306,10 @@ export default function ConversationsPage() {
           buyerNickname?: string | null;
           itemTitle?: string | null;
         };
+        whatsAppDelivery?: {
+          sent?: boolean;
+          to?: string;
+        };
         error?: string;
       };
 
@@ -317,6 +329,12 @@ export default function ConversationsPage() {
         setMlSentBanner({
           buyerNickname: payload.mercadoLibreDelivery.buyerNickname ?? null,
           itemTitle: payload.mercadoLibreDelivery.itemTitle ?? null,
+        });
+      }
+
+      if (payload.whatsAppDelivery?.sent && payload.whatsAppDelivery.to) {
+        setWaSentBanner({
+          to: formatWhatsAppPhoneDisplay(payload.whatsAppDelivery.to),
         });
       }
 
@@ -764,6 +782,19 @@ export default function ConversationsPage() {
         </div>
       )}
 
+      {waSentBanner && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-800">
+          <CheckCircle2
+            className="h-4 w-4 shrink-0 text-emerald-600"
+            aria-hidden="true"
+          />
+          <span>
+            {t.dashboard.conversations.waSentSuccess}{" "}
+            <strong className="font-semibold">{waSentBanner.to}</strong>.
+          </span>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white p-12 text-sm text-slate-500">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -792,6 +823,9 @@ export default function ConversationsPage() {
                     conv.channel?.type === "mercadolibre"
                       ? parseMercadoLibreThreadMeta(conv.external_thread_id)
                       : null;
+                  const waListMeta = parseWhatsAppThreadMeta(
+                    conv.external_thread_id
+                  );
                   const isSelected = activeConversation?.id === conv.id;
 
                   return (
@@ -819,6 +853,13 @@ export default function ConversationsPage() {
                       {mlListMeta?.item_title && (
                         <p className="mt-2 truncate text-[11px] font-semibold text-amber-800">
                           {mlListMeta.item_title}
+                        </p>
+                      )}
+                      {waListMeta && (
+                        <p className="mt-2 truncate text-[11px] font-semibold text-emerald-800">
+                          {waListMeta.contact_name
+                            ? `${waListMeta.contact_name} · ${formatWhatsAppPhoneDisplay(waListMeta.from)}`
+                            : formatWhatsAppPhoneDisplay(waListMeta.from)}
                         </p>
                       )}
                       <p className="mt-2 line-clamp-2 text-xs font-medium text-slate-800">
@@ -931,6 +972,37 @@ export default function ConversationsPage() {
                                 {t.dashboard.conversations.mlSimulatedBadge}
                               </span>
                             )}
+                          </div>
+                        );
+                      }
+
+                      const waMeta = parseWhatsAppThreadMeta(
+                        activeConversation.external_thread_id
+                      );
+                      if (waMeta) {
+                        return (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-emerald-200/90 bg-emerald-50/70 px-3 py-1.5 text-xs text-emerald-950">
+                            <span className="inline-flex items-center gap-1.5">
+                              <MessageCircle
+                                className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                                aria-hidden="true"
+                              />
+                              <span>
+                                <strong>
+                                  {t.dashboard.conversations.waContactLabel}:
+                                </strong>{" "}
+                                {waMeta.contact_name ||
+                                  formatWhatsAppPhoneDisplay(waMeta.from)}
+                              </span>
+                            </span>
+                            <span>
+                              <strong>
+                                {t.dashboard.conversations.waPhoneLabel}:
+                              </strong>{" "}
+                              <code className="font-mono">
+                                {formatWhatsAppPhoneDisplay(waMeta.from)}
+                              </code>
+                            </span>
                           </div>
                         );
                       }

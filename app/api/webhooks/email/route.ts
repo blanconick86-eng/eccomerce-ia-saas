@@ -464,6 +464,7 @@ async function processBrevoInboundWebhook(
       conversationId: existingConversationId,
       channelId: channel.id,
       externalThreadId,
+      customerEmail: fromEmail,
       usageEventType: "email_reply",
       includeUnapprovedHistory: false,
     });
@@ -636,6 +637,7 @@ export async function POST(request: NextRequest) {
     conversationId,
     channelId: channel.id,
     externalThreadId,
+    customerEmail: fromEmail,
     usageEventType: "email_reply",
     includeUnapprovedHistory: false,
   });

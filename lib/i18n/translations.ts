@@ -576,6 +576,9 @@ export const translations = {
         mlSimulatedBadge: "Modo simulado",
         mlSentSuccess:
           "Respuesta aprobada y marcada como enviada en Mercado Libre (Modo simulado)",
+        waContactLabel: "Contacto WhatsApp",
+        waPhoneLabel: "Teléfono",
+        waSentSuccess: "Respuesta enviada por WhatsApp Cloud API a",
         statusLabels: {
           pending_approval: "Pendiente de aprobación",
           auto_sent: "Enviada automáticamente",
@@ -641,10 +644,10 @@ export const translations = {
               "Atendé consultas de compradores vía Selling Partner API con aprobación humana o automática.",
           },
           {
-            id: "whatsapp",
-            title: "WhatsApp",
+            id: "meta_social",
+            title: "Instagram y Messenger (Meta)",
             description:
-              "Conectá tu número de WhatsApp Business Cloud API para atender consultas directo en la bandeja.",
+              "El webhook unificado de Meta ya está preparado para sumar mensajes directos de Instagram y Facebook Messenger en el próximo paso.",
           },
         ],
         loading: "Cargando canales...",
@@ -790,6 +793,33 @@ export const translations = {
               "No pudimos guardar las credenciales de Shopify en Supabase.",
             unknown: "Ocurrió un error al conectar con Shopify.",
           },
+        },
+        whatsappSection: {
+          title: "WhatsApp (Meta Cloud API)",
+          subtitle:
+            "Recibí mensajes reales de WhatsApp Business en la bandeja unificada y respondé automáticamente con el motor de IA de StoreOne (catálogo, políticas y pedidos de Shopify).",
+          metaUnifiedBadge: "Webhook Unificado Meta",
+          channelBadge: "WhatsApp",
+          configuredBadge: "Configurado en servidor",
+          missingConfigBadge: "Pendiente de variables",
+          statusTitle: "Estado de credenciales en el servidor",
+          configuredDesc:
+            "Se detectaron WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN cargados en el servidor. El canal está listo para recibir y responder mensajes.",
+          missingConfigDesc:
+            "Configurá WHATSAPP_PHONE_NUMBER_ID y WHATSAPP_ACCESS_TOKEN (junto con META_VERIFY_TOKEN y META_APP_SECRET) en las variables de entorno de Vercel / .env.local.",
+          phoneIdEnvLabel: "WHATSAPP_PHONE_NUMBER_ID",
+          accessTokenEnvLabel: "WHATSAPP_ACCESS_TOKEN",
+          verifyTokenEnvLabel: "META_VERIFY_TOKEN",
+          appSecretEnvLabel: "META_APP_SECRET",
+          envLoaded: "Cargado",
+          envMissing: "Falta configurar",
+          graphVersionLabel: "Graph API",
+          webhookTitle: "URL del Webhook Unificado (Meta App Dashboard)",
+          webhookHelper:
+            "Pegá esta URL en Meta for Developers → WhatsApp → Configuración → Webhook (suscribite al campo messages). También soporta eventos futuros de Instagram y Messenger.",
+          copyWebhookBtn: "Copiar URL",
+          copiedWebhookBtn: "¡URL copiada!",
+          goToConversationsBtn: "Ver chats en Conversaciones",
         },
       },
       knowledge: {
@@ -1551,6 +1581,9 @@ export const translations = {
         mlSimulatedBadge: "Simulated mode",
         mlSentSuccess:
           "Reply approved and marked as sent on Mercado Libre (Simulated mode)",
+        waContactLabel: "WhatsApp Contact",
+        waPhoneLabel: "Phone",
+        waSentSuccess: "Reply sent via WhatsApp Cloud API to",
         statusLabels: {
           pending_approval: "Pending approval",
           auto_sent: "Auto-sent",
@@ -1616,10 +1649,10 @@ export const translations = {
               "Handle buyer inquiries via Selling Partner API with human approval or safe auto-send rules.",
           },
           {
-            id: "whatsapp",
-            title: "WhatsApp",
+            id: "meta_social",
+            title: "Instagram & Messenger (Meta)",
             description:
-              "Connect WhatsApp Business Cloud API so customer chats arrive directly in your unified inbox.",
+              "The unified Meta webhook is already wired with stubs to connect Instagram Direct and Facebook Messenger next.",
           },
         ],
         loading: "Loading channels...",
@@ -1765,6 +1798,33 @@ export const translations = {
               "Could not save Shopify credentials in Supabase.",
             unknown: "An error occurred while connecting Shopify.",
           },
+        },
+        whatsappSection: {
+          title: "WhatsApp (Meta Cloud API)",
+          subtitle:
+            "Receive live WhatsApp Business messages in the unified inbox and reply automatically with StoreOne's AI engine (catalog, policies, and Shopify orders).",
+          metaUnifiedBadge: "Unified Meta Webhook",
+          channelBadge: "WhatsApp",
+          configuredBadge: "Configured on server",
+          missingConfigBadge: "Missing env vars",
+          statusTitle: "Server environment status",
+          configuredDesc:
+            "WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN are loaded on the server. Ready to receive and reply to WhatsApp messages.",
+          missingConfigDesc:
+            "Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN (along with META_VERIFY_TOKEN and META_APP_SECRET) in Vercel / .env.local.",
+          phoneIdEnvLabel: "WHATSAPP_PHONE_NUMBER_ID",
+          accessTokenEnvLabel: "WHATSAPP_ACCESS_TOKEN",
+          verifyTokenEnvLabel: "META_VERIFY_TOKEN",
+          appSecretEnvLabel: "META_APP_SECRET",
+          envLoaded: "Loaded",
+          envMissing: "Missing",
+          graphVersionLabel: "Graph API",
+          webhookTitle: "Unified Webhook URL (Meta App Dashboard)",
+          webhookHelper:
+            "Paste this URL in Meta for Developers → WhatsApp → Configuration → Webhook (subscribe to the messages field). Also ready for Instagram and Messenger.",
+          copyWebhookBtn: "Copy URL",
+          copiedWebhookBtn: "URL copied!",
+          goToConversationsBtn: "View chats in Conversations",
         },
       },
       knowledge: {

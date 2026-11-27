@@ -9,6 +9,10 @@ import {
   isSimulatedMercadoLibreChannel,
   parseMercadoLibreThreadMeta,
 } from "@/lib/mercadolibre/simulated";
+import {
+  parseWhatsAppThreadMeta,
+  sendWhatsAppTextMessage,
+} from "@/lib/meta/whatsapp";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 import { messageModerationSchema } from "@/lib/validation/ai";
 import type { ChannelSummary, Conversation, Message } from "@/types/database";
@@ -227,6 +231,13 @@ export async function PATCH(request: NextRequest) {
         itemTitle: string | null;
       }
     | undefined;
+  let whatsAppDelivery:
+    | {
+        sent: true;
+        to: string;
+        id: string | null;
+      }
+    | undefined;
 
   if (
     (action === "approve" || action === "edit_and_approve") &&
@@ -297,6 +308,43 @@ export async function PATCH(request: NextRequest) {
       buyerNickname: mlMeta?.buyer_nickname || null,
       itemTitle: mlMeta?.item_title || null,
     };
+  } else if (
+    (action === "approve" || action === "edit_and_approve") &&
+    convChannel?.type === "whatsapp"
+  ) {
+    const waMeta = parseWhatsAppThreadMeta(
+      (ownerConv as { external_thread_id?: string | null }).external_thread_id
+    );
+    if (!waMeta?.from) {
+      return NextResponse.json(
+        { error: "Conversation is missing WhatsApp recipient phone metadata" },
+        { status: 400 }
+      );
+    }
+
+    const finalContent =
+      action === "edit_and_approve" && content
+        ? content
+        : targetMessage.content;
+
+    const sendResult = await sendWhatsAppTextMessage({
+      to: waMeta.from,
+      body: finalContent,
+      phoneNumberId: waMeta.phone_number_id,
+    });
+
+    if (!sendResult.ok) {
+      return NextResponse.json(
+        { error: `Failed to send WhatsApp reply: ${sendResult.error}` },
+        { status: 502 }
+      );
+    }
+
+    whatsAppDelivery = {
+      sent: true,
+      to: sendResult.recipientUsed,
+      id: sendResult.externalMessageId,
+    };
   }
 
   const updateFields =
@@ -337,5 +385,6 @@ export async function PATCH(request: NextRequest) {
     conversationStatus: nextConversationStatus,
     ...(emailDelivery ? { emailDelivery } : {}),
     ...(mercadoLibreDelivery ? { mercadoLibreDelivery } : {}),
+    ...(whatsAppDelivery ? { whatsAppDelivery } : {}),
   });
 }

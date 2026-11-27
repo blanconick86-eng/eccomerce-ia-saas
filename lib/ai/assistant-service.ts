@@ -7,6 +7,12 @@ import {
   retrieveRelevantProducts,
   type SafetyReason,
 } from "@/lib/ai/groq";
+import { parseEmailThreadMeta } from "@/lib/email/brevo";
+import {
+  extractOrderLookupSignals,
+  lookupShopifyOrdersForStore,
+  type ShopifyOrderSummary,
+} from "@/lib/shopify/orders";
 import {
   AI_LANGUAGES,
   AI_TONES,
@@ -60,6 +66,7 @@ export async function runStoreAssistant(params: {
   conversationId?: string;
   channelId?: string | null;
   externalThreadId?: string | null;
+  customerEmail?: string | null;
   usageEventType?: string;
   includeUnapprovedHistory?: boolean;
 }): Promise<RunStoreAssistantResult> {
@@ -70,6 +77,7 @@ export async function runStoreAssistant(params: {
     conversationId,
     channelId,
     externalThreadId,
+    customerEmail,
     usageEventType = "assistant_reply",
     includeUnapprovedHistory = true,
   } = params;
@@ -180,6 +188,45 @@ export async function runStoreAssistant(params: {
   const { products: retrievedProducts, matchedByKeywords } =
     retrieveRelevantProducts(allProducts, message);
 
+  // Step A.2: Real-time Shopify order lookup when the message asks about an order
+  const effectiveCustomerEmail =
+    customerEmail?.trim() ||
+    parseEmailThreadMeta(
+      externalThreadId ?? existingConversation?.external_thread_id
+    )?.fromEmail ||
+    null;
+
+  const orderSignals = extractOrderLookupSignals({
+    message,
+    senderEmail: effectiveCustomerEmail,
+    history: historyMessages,
+  });
+
+  let shopifyOrders: ShopifyOrderSummary[] = [];
+  let shopifyOrderLookupAttempted = false;
+  let shopifyOrderQueryUsed: string | null = null;
+
+  if (orderSignals.shouldLookup && (orderSignals.orderName || orderSignals.email)) {
+    try {
+      const lookupResult = await lookupShopifyOrdersForStore({
+        supabase,
+        storeId: store.id,
+        orderName: orderSignals.orderName,
+        email: orderSignals.email,
+      });
+      if (lookupResult.connected) {
+        shopifyOrders = lookupResult.orders;
+        shopifyOrderLookupAttempted = true;
+        shopifyOrderQueryUsed = lookupResult.queryUsed;
+      }
+    } catch (orderErr) {
+      console.warn("[Assistant Service] Shopify live order lookup failed:", {
+        storeId: store.id,
+        error: orderErr instanceof Error ? orderErr.message : String(orderErr),
+      });
+    }
+  }
+
   // Steps B-D: Classification, deterministic safety evaluation, and grounded generation
   let classification: QueryClassification;
   let decision: {
@@ -195,6 +242,9 @@ export async function runStoreAssistant(params: {
       policies: storePolicies,
       matchedByKeywords,
       storeLanguage: store.language,
+      shopifyOrders,
+      shopifyOrderLookupAttempted,
+      shopifyOrderQueryUsed,
     });
 
     decision = evaluateAssistantStatus({
@@ -212,6 +262,9 @@ export async function runStoreAssistant(params: {
       tone,
       configuredLanguage,
       storeName: store.name,
+      shopifyOrders,
+      shopifyOrderLookupAttempted,
+      shopifyOrderQueryUsed,
     });
   } catch (error) {
     console.error("[Assistant Service] Groq request failed:", {

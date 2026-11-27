@@ -1,4 +1,8 @@
 import {
+  formatShopifyOrdersContext,
+  type ShopifyOrderSummary,
+} from "@/lib/shopify/orders";
+import {
   ASSISTANT_TOPICS,
   classificationSchema,
   type AiTone,
@@ -371,9 +375,20 @@ export async function classifyCustomerQuery(params: {
   policies: Policy[];
   matchedByKeywords: boolean;
   storeLanguage?: string;
+  shopifyOrders?: ShopifyOrderSummary[];
+  shopifyOrderLookupAttempted?: boolean;
+  shopifyOrderQueryUsed?: string | null;
 }): Promise<QueryClassification> {
-  const { message, products, policies, matchedByKeywords, storeLanguage } =
-    params;
+  const {
+    message,
+    products,
+    policies,
+    matchedByKeywords,
+    storeLanguage,
+    shopifyOrders = [],
+    shopifyOrderLookupAttempted = false,
+    shopifyOrderQueryUsed = null,
+  } = params;
   const fallbackLanguage = inferFallbackLanguage(message, storeLanguage);
 
   const systemInstruction = [
@@ -387,6 +402,19 @@ export async function classifyCustomerQuery(params: {
     }),
   ].join("\n");
 
+  const orderContextBlock =
+    shopifyOrderLookupAttempted || shopifyOrders.length > 0
+      ? [
+          "",
+          "Verified Shopify Live Order Data:",
+          formatShopifyOrdersContext({
+            orders: shopifyOrders,
+            attempted: shopifyOrderLookupAttempted,
+            queryUsed: shopifyOrderQueryUsed,
+          }),
+        ]
+      : [];
+
   const classificationPrompt = [
     "Classify the customer support message for an e-commerce store and return JSON only.",
     "",
@@ -398,7 +426,7 @@ export async function classifyCustomerQuery(params: {
     "",
     "Allowed topic meanings:",
     "- products: product availability, price, specs, sizing, recommendations, catalog items",
-    "- shipping: delivery times, shipping fees, coverage areas, tracking rules",
+    "- shipping: delivery times, shipping fees, coverage areas, order status, tracking rules",
     "- returns: return window, exchange policy, return conditions",
     "- payments: accepted payment methods, currency, invoices",
     "- refund_execution: customer requesting an actual refund, chargeback, or money back on an existing order",
@@ -407,8 +435,8 @@ export async function classifyCustomerQuery(params: {
     "",
     "Rules for booleans:",
     "- language: 'es' if the customer wrote in Spanish, 'en' if in English.",
-    "- has_sufficient_info: true ONLY if the provided catalog products and/or policies contain enough verified facts to answer accurately without guessing; false if key product/policy information is missing or ambiguous.",
-    "- requires_human: true if the customer wants refund_execution, order_changes, reports a damaged/missing order, expresses anger/complaint, asks for exceptions/discounts, or needs human verification; false otherwise.",
+    "- has_sufficient_info: true ONLY if the provided catalog products, store policies, and/or Verified Shopify Live Order Data contain enough verified facts to answer accurately without guessing; false if key product/policy/order information is missing or ambiguous.",
+    "- requires_human: true if the customer wants refund_execution, order_changes, reports a damaged/missing order, expresses anger/complaint, asks for exceptions/discounts, or needs human verification; false otherwise (note: simple order status/tracking inquiries answered directly by Verified Shopify Live Order Data do NOT require human intervention).",
     "",
     `Keyword product match found: ${matchedByKeywords ? "yes" : "no (showing reference sample only)"}`,
     "",
@@ -417,6 +445,7 @@ export async function classifyCustomerQuery(params: {
     "",
     "Store Policies:",
     formatPoliciesContext(policies),
+    ...orderContextBlock,
     "",
     `Customer message: """${message}"""`,
   ].join("\n");
@@ -508,6 +537,9 @@ export async function generateAssistantReply(params: {
   tone: AiTone;
   configuredLanguage: "auto" | "es" | "en";
   storeName: string;
+  shopifyOrders?: ShopifyOrderSummary[];
+  shopifyOrderLookupAttempted?: boolean;
+  shopifyOrderQueryUsed?: string | null;
 }): Promise<string> {
   const {
     message,
@@ -518,6 +550,9 @@ export async function generateAssistantReply(params: {
     tone,
     configuredLanguage,
     storeName,
+    shopifyOrders = [],
+    shopifyOrderLookupAttempted = false,
+    shopifyOrderQueryUsed = null,
   } = params;
 
   const targetLanguage =
@@ -532,18 +567,32 @@ export async function generateAssistantReply(params: {
         ? "Polite, structured, and formal."
         : "Direct, brief, and to the point.";
 
+  const orderContextBlock =
+    shopifyOrderLookupAttempted || shopifyOrders.length > 0
+      ? [
+          "",
+          "Verified Shopify Live Order Data:",
+          formatShopifyOrdersContext({
+            orders: shopifyOrders,
+            attempted: shopifyOrderLookupAttempted,
+            queryUsed: shopifyOrderQueryUsed,
+          }),
+        ]
+      : [];
+
   const systemPrompt = [
     `You are the AI customer support assistant for "${storeName}".`,
     `Write your reply strictly in ${targetLanguage === "en" ? "English" : "Spanish"}.`,
     `Tone: ${toneDirective}`,
     "",
     "MANDATORY SAFETY RULES (NEVER VIOLATE):",
-    "1. Use ONLY the provided Store Products and Store Policies below as facts.",
-    "2. NEVER invent prices, currencies, stock availability, discounts, or product specifications.",
+    "1. Use ONLY the provided Store Products, Store Policies, and Verified Shopify Live Order Data below as facts.",
+    "2. NEVER invent prices, currencies, stock availability, discounts, product specifications, order statuses, or tracking links.",
     "3. NEVER promise shipping times, shipping rates, or delivery dates that are not explicitly documented in the Store Policies.",
     "4. NEVER confirm, promise, or execute refunds, return approvals, or order changes/cancellations. Politely state that a human support specialist will review and handle the request.",
-    "5. If the customer asks about a product, SKU, price, or policy detail that is NOT in the provided context, clearly and honestly admit that you do not have that information in the store's records.",
+    "5. If the customer asks about a product, SKU, price, policy detail, or order that is NOT in the provided context, clearly and honestly admit that you do not have that information (and if order lookup returned 0 matches, politely ask them to verify their order number such as #1001 or purchase email).",
     "6. When referencing a product from the catalog, cite its exact SKU and exact listed price/stock status.",
+    "7. When Verified Shopify Live Order Data includes a matching order, clearly share its real financial_status, fulfillment_status, items, total, and tracking_number / tracking_url (if available).",
     "",
     `Classification: topic=${classification.topic}, has_sufficient_info=${classification.has_sufficient_info}, requires_human=${classification.requires_human}`,
     "",
@@ -552,6 +601,7 @@ export async function generateAssistantReply(params: {
     "",
     "Store Policies:",
     formatPoliciesContext(policies),
+    ...orderContextBlock,
   ].join("\n");
 
   const messages: GroqChatMessage[] = [

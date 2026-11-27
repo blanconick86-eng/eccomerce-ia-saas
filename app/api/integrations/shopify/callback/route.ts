@@ -9,6 +9,7 @@ import {
   safeEqualStrings,
   verifyShopifyHmac,
 } from "@/lib/shopify/client";
+import { registerShopifyWebhooks } from "@/lib/shopify/webhooks";
 import { getAuthenticatedStore } from "@/lib/supabase/store";
 
 function buildChannelsRedirect(params: Record<string, string>): NextResponse {
@@ -173,6 +174,15 @@ export async function GET(request: NextRequest) {
       shopify: "error",
       reason: "db_error",
     });
+  }
+
+  try {
+    await registerShopifyWebhooks(normalizedShop, accessToken);
+  } catch (webhookError) {
+    console.warn(
+      "[Shopify Callback] Non-fatal webhook registration failure:",
+      webhookError
+    );
   }
 
   return buildChannelsRedirect({ shopify: "connected" });

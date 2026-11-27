@@ -39,6 +39,10 @@ import {
   DEFAULT_MELI_SELLER_NICKNAME,
   parseMercadoLibreCredentials,
 } from "@/lib/mercadolibre/simulated";
+import {
+  META_WEBHOOK_URL,
+  type MetaWhatsAppStatusSummary,
+} from "@/lib/meta/shared";
 import { normalizeShopDomain } from "@/lib/shopify/shared";
 import type { Channel, ShopifyIntegrationSummary } from "@/types/database";
 
@@ -132,12 +136,12 @@ type MercadoLibreSimResponse = {
 
 const UPCOMING_ICON_MAP = {
   amazon: Package,
-  whatsapp: MessageCircle,
+  meta_social: MessageCircle,
 } as const;
 
 const UPCOMING_COLOR_MAP = {
   amazon: "bg-orange-50 text-orange-600 ring-orange-200",
-  whatsapp: "bg-emerald-50 text-emerald-600 ring-emerald-200",
+  meta_social: "bg-violet-50 text-violet-600 ring-violet-200",
 } as const;
 
 export default function ChannelsPage() {
@@ -214,6 +218,11 @@ export default function ChannelsPage() {
     setIsConfirmingShopifyDisconnect,
   ] = useState(false);
   const [isDisconnectingShopify, setIsDisconnectingShopify] = useState(false);
+
+  // Meta (WhatsApp Cloud API) status state
+  const [metaStatus, setMetaStatus] =
+    useState<MetaWhatsAppStatusSummary | null>(null);
+  const [isLoadingMeta, setIsLoadingMeta] = useState(true);
 
   const hasHandledShopifyRedirectRef = useRef(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -313,6 +322,35 @@ export default function ChannelsPage() {
       cancelled = true;
     };
   }, [t.dashboard.channels.loadError]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/integrations/meta/status")
+      .then(async (res) => {
+        if (!res.ok) {
+          return null;
+        }
+        return (await res.json()) as MetaWhatsAppStatusSummary;
+      })
+      .then((payload) => {
+        if (!cancelled && payload) {
+          setMetaStatus(payload);
+        }
+      })
+      .catch(() => {
+        // Keep default unconfigured summary on network failure
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingMeta(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSyncShopify = useCallback(async () => {
     setIsSyncingShopify(true);
@@ -1523,6 +1561,215 @@ export default function ChannelsPage() {
         )}
       </section>
 
+      {/* WhatsApp (Meta Cloud API) Card */}
+      <section className="rounded-2xl border border-emerald-300/90 bg-white p-6 shadow-xs">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200">
+              <MessageCircle className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">
+                {t.dashboard.channels.whatsappSection.title}
+              </h2>
+              <p className="mt-0.5 text-sm text-slate-600">
+                {t.dashboard.channels.whatsappSection.subtitle}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 ring-1 ring-inset ring-slate-200">
+              <span>
+                {t.dashboard.channels.whatsappSection.metaUnifiedBadge}
+              </span>
+            </span>
+
+            {!isLoadingMeta &&
+              (metaStatus?.configured ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                  <span>
+                    {t.dashboard.channels.whatsappSection.configuredBadge}
+                  </span>
+                </span>
+              ) : (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
+                  <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                  <span>
+                    {t.dashboard.channels.whatsappSection.missingConfigBadge}
+                  </span>
+                </span>
+              ))}
+          </div>
+        </div>
+
+        {/* Server configuration status */}
+        {isLoadingMeta ? (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span>{t.dashboard.channels.loading}</span>
+          </div>
+        ) : (
+          <div
+            className={`mt-4 rounded-xl border p-4 ${
+              metaStatus?.configured
+                ? "border-emerald-200 bg-emerald-50/60"
+                : "border-amber-200 bg-amber-50/60"
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span
+                className={`text-xs font-semibold ${
+                  metaStatus?.configured ? "text-emerald-950" : "text-amber-950"
+                }`}
+              >
+                {t.dashboard.channels.whatsappSection.statusTitle}
+              </span>
+              {metaStatus?.graphVersion && (
+                <span className="rounded-md bg-white px-2 py-0.5 font-mono text-[11px] font-medium text-slate-700 ring-1 ring-slate-200">
+                  {t.dashboard.channels.whatsappSection.graphVersionLabel}:{" "}
+                  {metaStatus.graphVersion}
+                </span>
+              )}
+            </div>
+
+            <p
+              className={`mt-1 text-xs leading-relaxed ${
+                metaStatus?.configured ? "text-emerald-900" : "text-amber-900"
+              }`}
+            >
+              {metaStatus?.configured
+                ? t.dashboard.channels.whatsappSection.configuredDesc
+                : t.dashboard.channels.whatsappSection.missingConfigDesc}
+            </p>
+
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                {
+                  key: "phone_id",
+                  label: t.dashboard.channels.whatsappSection.phoneIdEnvLabel,
+                  ok: Boolean(metaStatus?.hasPhoneNumberId),
+                  detail: metaStatus?.phoneNumberIdPreview ?? null,
+                },
+                {
+                  key: "access_token",
+                  label:
+                    t.dashboard.channels.whatsappSection.accessTokenEnvLabel,
+                  ok: Boolean(metaStatus?.hasAccessToken),
+                  detail: null,
+                },
+                {
+                  key: "verify_token",
+                  label:
+                    t.dashboard.channels.whatsappSection.verifyTokenEnvLabel,
+                  ok: Boolean(metaStatus?.hasVerifyToken),
+                  detail: null,
+                },
+                {
+                  key: "app_secret",
+                  label: t.dashboard.channels.whatsappSection.appSecretEnvLabel,
+                  ok: Boolean(metaStatus?.hasAppSecret),
+                  detail: null,
+                },
+              ].map((envItem) => (
+                <div
+                  key={envItem.key}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/90 bg-white px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <code className="block truncate font-mono text-[11px] font-semibold text-slate-800">
+                      {envItem.label}
+                    </code>
+                    {envItem.detail && (
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {envItem.detail}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${
+                      envItem.ok
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                        : "bg-amber-50 text-amber-800 ring-amber-200"
+                    }`}
+                  >
+                    {envItem.ok ? (
+                      <Check className="h-3 w-3" aria-hidden="true" />
+                    ) : (
+                      <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                    )}
+                    <span>
+                      {envItem.ok
+                        ? t.dashboard.channels.whatsappSection.envLoaded
+                        : t.dashboard.channels.whatsappSection.envMissing}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Copyable Meta Unified Webhook URL */}
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-slate-900">
+              {t.dashboard.channels.whatsappSection.webhookTitle}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                handleCopyValue(
+                  "meta-webhook-url",
+                  metaStatus?.webhookUrl || META_WEBHOOK_URL
+                )
+              }
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-2xs transition-colors hover:bg-emerald-50"
+            >
+              {copiedKey === "meta-webhook-url" ? (
+                <>
+                  <Check
+                    className="h-3.5 w-3.5 text-emerald-600"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {t.dashboard.channels.whatsappSection.copiedWebhookBtn}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>
+                    {t.dashboard.channels.whatsappSection.copyWebhookBtn}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <p className="mt-2 break-all rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-xs font-medium text-slate-900">
+            {metaStatus?.webhookUrl || META_WEBHOOK_URL}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="max-w-2xl text-[11px] leading-relaxed text-slate-600">
+              {t.dashboard.channels.whatsappSection.webhookHelper}
+            </p>
+
+            <Link
+              href="/dashboard/conversations"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-emerald-700"
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>
+                {t.dashboard.channels.whatsappSection.goToConversationsBtn}
+              </span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Mercado Libre (Simulated Mode) Card */}
       <section className="rounded-2xl border border-amber-300/90 bg-white p-6 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1888,8 +2135,118 @@ export default function ChannelsPage() {
             {channels.map((channel) => {
               const isEmailChannel = channel.type === "email";
               const isMercadoLibreChannel = channel.type === "mercadolibre";
+              const isWhatsAppChannel = channel.type === "whatsapp";
               const isConfirmingDelete = confirmDeleteId === channel.id;
               const isDeletingThis = deletingId === channel.id;
+
+              if (isWhatsAppChannel) {
+                return (
+                  <article
+                    key={channel.id}
+                    className="rounded-2xl border border-emerald-300/90 bg-white p-6 shadow-xs"
+                  >
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-slate-900">
+                            {channel.name}
+                          </h3>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200">
+                            <MessageCircle
+                              className="h-3 w-3"
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {
+                                t.dashboard.channels.whatsappSection
+                                  .channelBadge
+                              }
+                            </span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                            <CheckCircle2
+                              className="h-3 w-3"
+                              aria-hidden="true"
+                            />
+                            <span>{t.dashboard.channels.connectedBadge}</span>
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                          <span className="text-slate-400">
+                            {t.dashboard.channels.channelIdLabel}:{" "}
+                            <code className="font-mono text-slate-600">
+                              {channel.id}
+                            </code>
+                          </span>
+                          <span className="text-slate-400">
+                            {t.dashboard.channels.createdLabel}:{" "}
+                            {channel.created_at.slice(0, 10)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href="/dashboard/conversations"
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200 transition-colors hover:bg-emerald-100"
+                        >
+                          <MessageSquare
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          <span>
+                            {
+                              t.dashboard.channels.whatsappSection
+                                .goToConversationsBtn
+                            }
+                          </span>
+                        </Link>
+
+                        {isConfirmingDelete ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                            >
+                              {t.common.cancel}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDeletingThis}
+                              onClick={() => handleDelete(channel.id)}
+                              className="inline-flex items-center gap-1 rounded-xl bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {isDeletingThis && (
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              )}
+                              <span>
+                                {isDeletingThis
+                                  ? t.dashboard.channels.deleting
+                                  : t.dashboard.channels.confirmDelete}
+                              </span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(channel.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition-colors hover:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            <span>{t.dashboard.channels.deleteBtn}</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              }
 
               if (isMercadoLibreChannel) {
                 const meliCreds = parseMercadoLibreCredentials(

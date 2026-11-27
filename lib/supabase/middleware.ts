@@ -9,6 +9,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     pathname === "/widget.js" ||
     pathname.startsWith("/api/widget") ||
     pathname.startsWith("/api/webhooks") ||
+    pathname.startsWith("/api/integrations/shopify/webhooks") ||
+    pathname.startsWith("/api/integrations/meta/webhook") ||
     pathname.startsWith("/widget/")
   ) {
     return NextResponse.next({ request });

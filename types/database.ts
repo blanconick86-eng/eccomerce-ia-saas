@@ -96,6 +96,7 @@ export type Message = {
   role: string;
   content: string;
   status: string;
+  external_message_id?: string | null;
   created_at: string;
 };
 
