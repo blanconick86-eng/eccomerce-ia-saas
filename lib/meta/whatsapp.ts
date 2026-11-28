@@ -674,6 +674,138 @@ async function postWhatsAppGraphMessage(params: {
   return { ok: true, externalMessageId };
 }
 
+const ARGENTINA_THREE_DIGIT_AREA_CODES = new Set([
+  "220",
+  "221",
+  "223",
+  "230",
+  "236",
+  "237",
+  "249",
+  "260",
+  "261",
+  "263",
+  "264",
+  "266",
+  "280",
+  "291",
+  "294",
+  "297",
+  "298",
+  "299",
+  "336",
+  "341",
+  "342",
+  "343",
+  "345",
+  "348",
+  "351",
+  "353",
+  "358",
+  "362",
+  "364",
+  "370",
+  "376",
+  "379",
+  "380",
+  "381",
+  "383",
+  "385",
+  "387",
+  "388",
+]);
+
+const ARGENTINA_OVERLAPPING_FOUR_DIGIT_AREA_CODES = new Set([
+  "2202",
+  "2302",
+  "2940",
+  "2942",
+  "2945",
+  "2946",
+  "2948",
+  "2972",
+  "2982",
+  "2983",
+  "3435",
+  "3436",
+  "3437",
+  "3438",
+  "3454",
+  "3455",
+  "3456",
+  "3458",
+  "3482",
+  "3483",
+  "3487",
+  "3489",
+  "3532",
+  "3533",
+  "3537",
+  "3582",
+  "3583",
+  "3584",
+  "3585",
+  "3832",
+  "3835",
+  "3837",
+  "3838",
+  "3854",
+  "3855",
+  "3856",
+  "3857",
+  "3858",
+  "3873",
+  "3876",
+  "3877",
+  "3878",
+  "3885",
+  "3886",
+  "3887",
+  "3888",
+]);
+
+/**
+ * Normalizes Argentine 13-digit mobile numbers (`549` + 10-digit national number)
+ * for outbound WhatsApp Cloud API delivery by removing the `9` after `54` and
+ * inserting `15` after the area code (2, 3, or 4 digits):
+ * - `54911xxxxxxxx` -> `541115xxxxxxxx`
+ * - `5493434556507` -> `54343154556507`
+ */
+export function normalizeArgentinaWhatsAppPhone(
+  raw: string | null | undefined
+): string {
+  const digits = normalizeWhatsAppPhone(raw);
+  const match = /^549(\d{10})$/.exec(digits);
+  if (!match) {
+    return digits;
+  }
+
+  const national = match[1];
+  let areaCodeLength: number;
+
+  if (national.startsWith("11")) {
+    areaCodeLength = 2;
+  } else {
+    const prefix3 = national.slice(0, 3);
+    const prefix4 = national.slice(0, 4);
+
+    if (
+      ARGENTINA_OVERLAPPING_FOUR_DIGIT_AREA_CODES.has(prefix4) &&
+      national[4] >= "4"
+    ) {
+      areaCodeLength = 4;
+    } else if (ARGENTINA_THREE_DIGIT_AREA_CODES.has(prefix3)) {
+      areaCodeLength = 3;
+    } else {
+      areaCodeLength = 4;
+    }
+  }
+
+  const areaCode = national.slice(0, areaCodeLength);
+  const localNumber = national.slice(areaCodeLength);
+  return `54${areaCode}15${localNumber}`;
+}
+
 /**
  * Sends an outbound text message through Meta's WhatsApp Cloud API.
  */
@@ -703,13 +835,15 @@ export async function sendWhatsAppTextMessage(params: {
     };
   }
 
-  const normalizedTo = normalizeWhatsAppPhone(params.to);
-  if (!normalizedTo) {
+  const rawDigits = normalizeWhatsAppPhone(params.to);
+  if (!rawDigits) {
     return {
       ok: false,
       error: "Missing valid WhatsApp recipient phone number.",
     };
   }
+
+  const outboundTo = normalizeArgentinaWhatsAppPhone(rawDigits);
 
   const trimmedBody = params.body.trim();
   if (!trimmedBody) {
@@ -721,7 +855,7 @@ export async function sendWhatsAppTextMessage(params: {
       graphVersion: cfg.graphVersion,
       phoneNumberId: effectivePhoneNumberId,
       accessToken: cfg.accessToken,
-      to: normalizedTo,
+      to: outboundTo,
       bodyText: trimmedBody,
     });
 
@@ -729,21 +863,17 @@ export async function sendWhatsAppTextMessage(params: {
       return {
         ok: true,
         externalMessageId: primaryAttempt.externalMessageId,
-        recipientUsed: normalizedTo,
+        recipientUsed: outboundTo,
       };
     }
 
-    // Meta Sandbox test-list quirk for Argentine mobile numbers (`549...` vs `54...`)
-    if (
-      primaryAttempt.errorCode === 131030 &&
-      /^549\d{10}$/.test(normalizedTo)
-    ) {
-      const altArgentinaNumber = `54${normalizedTo.slice(3)}`;
+    // Fallback to original `549...` format if Meta's allow-list rejects the `15` variant
+    if (primaryAttempt.errorCode === 131030 && outboundTo !== rawDigits) {
       const fallbackAttempt = await postWhatsAppGraphMessage({
         graphVersion: cfg.graphVersion,
         phoneNumberId: effectivePhoneNumberId,
         accessToken: cfg.accessToken,
-        to: altArgentinaNumber,
+        to: rawDigits,
         bodyText: trimmedBody,
       });
 
@@ -751,13 +881,13 @@ export async function sendWhatsAppTextMessage(params: {
         return {
           ok: true,
           externalMessageId: fallbackAttempt.externalMessageId,
-          recipientUsed: altArgentinaNumber,
+          recipientUsed: rawDigits,
         };
       }
     }
 
     console.error("[WhatsApp Helper] Outbound message failed:", {
-      to: normalizedTo,
+      to: outboundTo,
       error: primaryAttempt.error,
     });
     return { ok: false, error: primaryAttempt.error };
